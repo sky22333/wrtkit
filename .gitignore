@@ -1,0 +1,7 @@
+web/node_modules/
+internal/web/dist/
+data/
+dist/
+*.exe
+tmp/
+web/src/assets/hero.png
