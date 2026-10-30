@@ -1,27 +1,39 @@
+import { initialBuild } from "./defaults";
+import { ReviewStep } from "./ReviewStep";
+import { PackagesStep } from "./PackagesStep";
+import { DeviceStep } from "./DeviceStep";
+import { FirmwareConfigStep } from "./FirmwareConfigStep";
+import { HistoryPage } from "./HistoryPage";
+import { SourcesPage } from "./SourcesPage";
+import { EnvironmentPage } from "./EnvironmentPage";
+import type {
+  Device,
+  Profile,
+  Build,
+  Job,
+  Artifact,
+  Cleanup,
+  Package,
+  MirrorSource,
+  Environment,
+} from "./types";
+import { api } from "./api";
+import { SettingsPage } from "./SettingsPage";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   App as AntApp,
+  Badge,
   Button,
   Card,
-  Checkbox,
-  Collapse,
   ConfigProvider,
-  Descriptions,
-  Empty,
   Flex,
   Form,
-  Input,
-  InputNumber,
   Layout,
   List,
   Menu,
-  Select,
   Space,
   Steps,
-  Table,
-  Tabs,
-  Tag,
   Tooltip,
   Typography,
 } from "antd";
@@ -29,15 +41,15 @@ import zhCN from "antd/locale/zh_CN";
 import {
   AppstoreOutlined,
   BuildOutlined,
+  CheckCircleOutlined,
   CloudServerOutlined,
   DeleteOutlined,
   DownloadOutlined,
-  EyeOutlined,
   FileOutlined,
   FileTextOutlined,
   FolderOpenOutlined,
   HistoryOutlined,
-  PlusOutlined,
+  HddOutlined,
   ReloadOutlined,
   SettingOutlined,
   StopOutlined,
@@ -53,90 +65,8 @@ import { formatBytes } from "./format";
 import "./App.css";
 
 const { Header, Content, Sider } = Layout;
-const { Title, Text, Paragraph } = Typography;
+const { Title, Text } = Typography;
 
-type Device = { id: string; target: string; title: string };
-type Profile = {
-  default_packages: string[];
-  device_packages: string[];
-  arch: string;
-  revision: string;
-  rootfs_supported: boolean;
-};
-type Build = {
-  version: string;
-  target: string;
-  profile: string;
-  device: string;
-  packages: string[];
-  remove: string[];
-  mirror: string;
-  hostname: string;
-  address: string;
-  timezone: string;
-  script: string;
-  theme: string;
-  wifi_ssid: string;
-  wifi_password: string;
-  root_password: string;
-  ppp_username: string;
-  ppp_password: string;
-  rootfs_size: number;
-};
-type Job = {
-  id: string;
-  status: string;
-  stage: string;
-  error: string;
-  created: string;
-  request: Build;
-};
-type Artifact = { name: string; size: number };
-type Cleanup = {
-  id: string;
-  path: string;
-  bytes: number;
-  image: string;
-  image_action: string;
-};
-type Package = {
-  name: string;
-  version: string;
-  feed: string;
-  category: string;
-};
-type MirrorSource = { name: string; url: string };
-type Environment = { name: string; available: boolean; message: string };
-
-async function api<T>(path: string, opts?: RequestInit): Promise<T> {
-  const r = await fetch("/api" + path, {
-    ...opts,
-    headers: { "Content-Type": "application/json", ...opts?.headers },
-  });
-  const data = await r.json();
-  if (!r.ok) throw Error(data.error || "请求失败");
-  return data as T;
-}
-const initial: Build = {
-  version: "",
-  target: "",
-  profile: "",
-  device: "",
-  packages: [],
-  remove: [],
-  mirror: "https://mirror.nju.edu.cn/immortalwrt",
-  hostname: "",
-  address: "",
-  timezone: "",
-  script: "",
-  theme: "",
-  wifi_ssid: "",
-  wifi_password: "",
-  root_password: "",
-  ppp_username: "",
-  ppp_password: "",
-  rootfs_size: 0,
-};
 const statuses: Record<string, string> = {
   queued: "等待中",
   running: "构建中",
@@ -159,11 +89,13 @@ function Workspace() {
   const [starting, setStarting] = useState(false);
   const [page, setPage] = useState("build");
   const [step, setStep] = useState(0);
-  const [draft, setDraft] = useState<Build>(initial);
+  const [draft, setDraft] = useState<Build>(initialBuild);
   const [mirrors, setMirrors] = useState<MirrorSource[]>([]);
   const [mirrorForm] = Form.useForm<{ mirrors: MirrorSource[] }>();
   const [savingMirrors, setSavingMirrors] = useState(false);
   const [registry, setRegistry] = useState("");
+  const [ecosystem, setEcosystem] = useState("immortalwrt");
+  const [switchingEcosystem, setSwitchingEcosystem] = useState(false);
   const [proxyType, setProxyType] = useState("none");
   const [proxyAddress, setProxyAddress] = useState("");
   const [savingProxy, setSavingProxy] = useState(false);
@@ -184,7 +116,6 @@ function Workspace() {
   const [packageFeed, setPackageFeed] = useState("all");
   const [env, setEnv] = useState<Environment | null>(null);
   const [checkingEnv, setCheckingEnv] = useState(true);
-  const [installing, setInstalling] = useState(false);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [job, setJob] = useState<Job | null>(null);
   const [artifacts, setArtifacts] = useState<Artifact[]>([]);
@@ -223,12 +154,14 @@ function Workspace() {
       .catch(error)
       .finally(() => setCheckingEnv(false));
     api<{
+      ecosystem: string;
       mirrors: MirrorSource[];
       registry: string;
       proxy: string;
       data_dir: string;
     }>("/settings")
       .then((x) => {
+        setEcosystem(x.ecosystem);
         setRegistry(x.registry);
         if (x.proxy) {
           const [kind, address] = x.proxy.split("://");
@@ -243,6 +176,7 @@ function Workspace() {
       .catch(error);
   }, [error, patch, mirrorForm]);
   useEffect(() => {
+    if (!draft.mirror) return;
     const controller = new AbortController();
     api<{ stable: string; versions: string[] }>(
       "/versions?mirror=" + encodeURIComponent(draft.mirror),
@@ -325,6 +259,8 @@ function Workspace() {
           const defaults = availableRecommendations(
             new Set(x.items.map((p) => p.name)),
           );
+          if (ecosystem === "openwrt" && x.items.some((p) => p.name === "luci"))
+            defaults.packages.push("luci");
           setDraft((d) => ({
             ...d,
             packages: defaults.packages,
@@ -343,7 +279,15 @@ function Workspace() {
         if (!controller.signal.aborted) setLoadingPackages(false);
       });
     return () => controller.abort();
-  }, [step, draft.version, draft.target, draft.profile, draft.mirror, error]);
+  }, [
+    step,
+    draft.version,
+    draft.target,
+    draft.profile,
+    draft.mirror,
+    ecosystem,
+    error,
+  ]);
   useEffect(() => {
     if (page === "history") api<Job[]>("/jobs").then(setJobs).catch(error);
   }, [page, error]);
@@ -610,6 +554,7 @@ function Workspace() {
         method: "POST",
         body: JSON.stringify({
           ...draft,
+          ecosystem,
           packages: additionalPackages,
           ...(wirelessSupported ? {} : { wifi_ssid: "", wifi_password: "" }),
           ...(pppSupported ? {} : { ppp_username: "", ppp_password: "" }),
@@ -683,6 +628,38 @@ function Workspace() {
       error(e);
     } finally {
       setSavingProxy(false);
+    }
+  };
+  const changeEcosystem = async (value: string) => {
+    setSwitchingEcosystem(true);
+    try {
+      const settings = await api<{
+        ecosystem: string;
+        mirrors: MirrorSource[];
+      }>("/settings/ecosystem", {
+        method: "PUT",
+        body: JSON.stringify({ ecosystem: value }),
+      });
+      setEcosystem(settings.ecosystem);
+      setMirrors(settings.mirrors);
+      mirrorForm.setFieldsValue({ mirrors: settings.mirrors });
+      initializedDevice.current = false;
+      setDraft({ ...initialBuild, mirror: settings.mirrors[0].url });
+      setProfile(null);
+      setPackageData([]);
+      setPackageWarnings([]);
+      setDeviceVersion("");
+      setVersions([]);
+      setDevices([]);
+      setTotal(0);
+      setDevicePage(1);
+      setStep(0);
+      setJob(null);
+      void message.success("固件生态已切换");
+    } catch (e) {
+      error(e);
+    } finally {
+      setSwitchingEcosystem(false);
     }
   };
   const saveRegistry = async () => {
@@ -797,14 +774,36 @@ function Workspace() {
       <Layout>
         <Header className="app-header">
           <Text type="secondary">{nav.find((x) => x.key === page)?.label}</Text>
-          <Tooltip title="检查构建环境">
-            <Button
-              type="text"
-              aria-label="检查构建环境"
-              icon={<ReloadOutlined />}
-              onClick={environment}
+          <Space size="small">
+            <Badge
+              status={
+                checkingEnv
+                  ? "processing"
+                  : env?.available
+                    ? "success"
+                    : env
+                      ? "error"
+                      : "default"
+              }
+              text={
+                checkingEnv
+                  ? "检查中"
+                  : env?.available
+                    ? "环境就绪"
+                    : env
+                      ? "环境不可用"
+                      : "环境待检查"
+              }
             />
-          </Tooltip>
+            <Tooltip title="检查构建环境">
+              <Button
+                type="text"
+                aria-label="检查构建环境"
+                icon={<ReloadOutlined />}
+                onClick={environment}
+              />
+            </Tooltip>
+          </Space>
         </Header>
         <Content className="app-content">
           {page === "build" && (
@@ -817,7 +816,8 @@ function Workspace() {
                 <div>
                   <Title level={3}>固件构建</Title>
                   <Text type="secondary">
-                    选择设备与软件，配置并构建 ImmortalWrt 固件。
+                    选择设备与软件，配置并构建{" "}
+                    {ecosystem === "openwrt" ? "OpenWrt" : "ImmortalWrt"} 固件。
                   </Text>
                 </div>
                 <Button
@@ -827,576 +827,80 @@ function Workspace() {
                   构建记录
                 </Button>
               </Flex>
-              <Card>
+              <Card className="build-workspace">
                 {step < 4 && (
                   <Steps
                     size="small"
+                    className="build-steps"
                     current={Math.min(step, 3)}
                     items={[
-                      { title: "选择设备" },
-                      { title: "选择软件" },
-                      { title: "配置固件" },
-                      { title: "确认构建" },
+                      { title: "选择设备", icon: <HddOutlined /> },
+                      { title: "选择软件", icon: <AppstoreOutlined /> },
+                      { title: "配置固件", icon: <SettingOutlined /> },
+                      { title: "确认构建", icon: <CheckCircleOutlined /> },
                     ]}
                   />
                 )}
-                <div className="step-content">
+                <div className="step-content" key={step}>
                   {step === 0 && (
-                    <Space
-                      orientation="vertical"
-                      size="middle"
-                      className="full"
-                    >
-                      <div>
-                        <Title level={4}>选择设备</Title>
-                        <Text type="secondary">
-                          选择系统版本，搜索设备型号或目标平台。
-                        </Text>
-                      </div>
-                      <Flex gap={12} wrap>
-                        <Select
-                          aria-label="数据源"
-                          value={draft.mirror}
-                          options={mirrors.map((m) => ({
-                            label: m.name,
-                            value: m.url,
-                            title: m.url,
-                          }))}
-                          className="mirror-select"
-                          onChange={(m) => {
-                            patch({
-                              mirror: m,
-                              profile: "",
-                              target: "",
-                              device: "",
-                              version: "",
-                            });
-                            setProfile(null);
-                            setDeviceVersion("");
-                            setVersions([]);
-                            setDevices([]);
-                            setTotal(0);
-                            setDevicePage(1);
-                          }}
-                        />
-                        <Select
-                          aria-label="系统版本"
-                          value={deviceVersion || undefined}
-                          placeholder="选择系统版本"
-                          options={versions.map((v) => ({
-                            label: v,
-                            value: v,
-                          }))}
-                          className="version-select"
-                          onChange={(v) => {
-                            setDeviceVersion(v);
-                            patch({
-                              version: "",
-                              profile: "",
-                              target: "",
-                              device: "",
-                            });
-                            setProfile(null);
-                            setDevicePage(1);
-                          }}
-                        />
-                        <Input.Search
-                          className="search-input"
-                          placeholder="搜索品牌、型号或平台"
-                          value={query}
-                          onChange={(e) => {
-                            setQuery(e.target.value);
-                            setDevicePage(1);
-                          }}
-                          allowClear
-                        />
-                      </Flex>
-                      <Table<Device>
-                        size="small"
-                        rowKey={(d) => d.target + "/" + d.id}
-                        loading={loadingDevices}
-                        dataSource={devices}
-                        pagination={{
-                          current: devicePage,
-                          pageSize: 100,
-                          total,
-                          showSizeChanger: false,
-                          onChange: setDevicePage,
-                        }}
-                        scroll={{ y: 430 }}
-                        rowSelection={{
-                          type: "radio",
-                          selectedRowKeys: draft.profile
-                            ? [draft.target + "/" + draft.profile]
-                            : [],
-                          onChange: (_, rows) => rows[0] && choose(rows[0]),
-                        }}
-                        onRow={(d) => ({
-                          onClick: () => choose(d),
-                          style: { cursor: "pointer" },
-                        })}
-                        columns={[
-                          {
-                            title: "设备",
-                            dataIndex: "title",
-                            render: (v, d) => (
-                              <Space orientation="vertical" size={0}>
-                                <Text>{v}</Text>
-                                <Text type="secondary">{d.id}</Text>
-                              </Space>
-                            ),
-                          },
-                          {
-                            title: "目标平台",
-                            dataIndex: "target",
-                            width: 180,
-                          },
-                        ]}
-                      />
-                      <Text type="secondary">共 {total} 个设备。</Text>
-                    </Space>
+                    <DeviceStep
+                      draft={draft}
+                      patch={patch}
+                      mirrors={mirrors}
+                      versions={versions}
+                      deviceVersion={deviceVersion}
+                      setDeviceVersion={setDeviceVersion}
+                      setProfile={setProfile}
+                      setVersions={setVersions}
+                      setDevices={setDevices}
+                      setTotal={setTotal}
+                      setDevicePage={setDevicePage}
+                      query={query}
+                      setQuery={setQuery}
+                      devicePage={devicePage}
+                      loadingDevices={loadingDevices}
+                      devices={devices}
+                      total={total}
+                      choose={choose}
+                    />
                   )}
                   {step === 1 && (
-                    <Space
-                      orientation="vertical"
-                      size="middle"
-                      className="full"
-                    >
-                      <div>
-                        <Title level={4}>选择软件</Title>
-                        <Text type="secondary">
-                          软件目录来自当前镜像站，软件依赖由 ImageBuilder 处理。
-                        </Text>
-                      </div>
-                      {packageWarnings.length > 0 && (
-                        <Alert
-                          type="warning"
-                          showIcon
-                          title="部分软件源索引不可用"
-                          description={packageWarnings.join("；")}
-                        />
-                      )}
-                      <Card
-                        size="small"
-                        title="已选择的软件包"
-                        extra={
-                          <Text type="secondary">
-                            {selectedPackages.length} 项
-                          </Text>
-                        }
-                      >
-                        <Text type="secondary">
-                          浅色为设备内置包；中文翻译随所选软件自动匹配。
-                        </Text>
-                        <div className="selected-packages">
-                          {selectedPackages.map((name) => (
-                            <Tooltip
-                              key={name}
-                              title={
-                                defaultSet.has(name)
-                                  ? "设备清单中的默认软件包"
-                                  : automaticTranslations.has(name)
-                                    ? "由已选软件自动匹配"
-                                    : undefined
-                              }
-                            >
-                              <Tag
-                                className={
-                                  defaultSet.has(name)
-                                    ? "builtin-package"
-                                    : undefined
-                                }
-                                closable={!automaticTranslations.has(name)}
-                                onClose={(e) => {
-                                  e.preventDefault();
-                                  selectPackage(name, false);
-                                }}
-                              >
-                                {name}
-                              </Tag>
-                            </Tooltip>
-                          ))}
-                        </div>
-                        {draft.remove.length > 0 && (
-                          <div className="removed-packages">
-                            <Text type="secondary">
-                              已移除的内置包，点击恢复：
-                            </Text>
-                            <Flex wrap gap={6}>
-                              {draft.remove.map((name) => (
-                                <Button
-                                  key={name}
-                                  size="small"
-                                  icon={<PlusOutlined />}
-                                  onClick={() => toggleDefault(name, false)}
-                                >
-                                  {name}
-                                </Button>
-                              ))}
-                            </Flex>
-                          </div>
-                        )}
-                      </Card>
-                      <Card size="small" title="软件包目录">
-                        <Space
-                          orientation="vertical"
-                          className="full"
-                          size="middle"
-                        >
-                          <Text type="secondary">
-                            软件来自所选设备的软件源，自动安装中文版本；依赖由构建环境解析。
-                          </Text>
-                          {draft.theme &&
-                            packageData.length > 0 &&
-                            !availableNames.has(draft.theme) && (
-                              <Alert
-                                type="warning"
-                                showIcon
-                                title="当前镜像没有所选主题，请在已选软件包中取消或更换。"
-                              />
-                            )}
-                          <Tabs
-                            activeKey={packageFeed}
-                            onChange={setPackageFeed}
-                            items={[
-                              { key: "all", label: "全部" },
-                              { key: "luci", label: "LuCI 界面" },
-                              { key: "themes", label: "主题" },
-                              { key: "proxy", label: "代理工具" },
-                            ]}
-                          />
-                          <Input.Search
-                            placeholder="搜索当前分类的软件包"
-                            value={packageSearch}
-                            onChange={(e) => setPackageSearch(e.target.value)}
-                            allowClear
-                          />
-                          <Table<Package>
-                            size="small"
-                            loading={loadingPackages}
-                            rowKey={(p) => p.feed + "/" + p.name}
-                            dataSource={categorizedPackages}
-                            pagination={{
-                              pageSize: 10,
-                              showSizeChanger: false,
-                              showTotal: (n) => `共 ${n} 项`,
-                            }}
-                            columns={[
-                              {
-                                title: "选择",
-                                width: 65,
-                                render: (_, p) => (
-                                  <Checkbox
-                                    aria-label={"选择 " + p.name}
-                                    disabled={automaticTranslations.has(p.name)}
-                                    checked={selectedPackages.includes(p.name)}
-                                    onChange={(e) =>
-                                      selectPackage(p.name, e.target.checked)
-                                    }
-                                  />
-                                ),
-                              },
-                              {
-                                title: "软件包",
-                                dataIndex: "name",
-                                render: (name: string) => (
-                                  <Space>
-                                    {name}
-                                    {defaultSet.has(name) &&
-                                      !draft.remove.includes(name) && (
-                                        <Tag>设备内置</Tag>
-                                      )}
-                                    {automaticTranslations.has(name) && (
-                                      <Tag>自动匹配中文</Tag>
-                                    )}
-                                  </Space>
-                                ),
-                              },
-                              {
-                                title: "版本",
-                                dataIndex: "version",
-                                width: 240,
-                              },
-                              {
-                                title: "软件源",
-                                dataIndex: "feed",
-                                width: 100,
-                              },
-                            ]}
-                          />
-                        </Space>
-                      </Card>
-                      <Text>
-                        新增 {additionalCount} 项，移除 {draft.remove.length} 项
-                      </Text>
-                    </Space>
+                    <PackagesStep
+                      draft={draft}
+                      packageWarnings={packageWarnings}
+                      selectedPackages={selectedPackages}
+                      defaultSet={defaultSet}
+                      automaticTranslations={automaticTranslations}
+                      selectPackage={selectPackage}
+                      toggleDefault={toggleDefault}
+                      packageData={packageData}
+                      availableNames={availableNames}
+                      packageFeed={packageFeed}
+                      setPackageFeed={setPackageFeed}
+                      packageSearch={packageSearch}
+                      setPackageSearch={setPackageSearch}
+                      loadingPackages={loadingPackages}
+                      categorizedPackages={categorizedPackages}
+                      additionalCount={additionalCount}
+                    />
                   )}
                   {step === 2 && (
-                    <Space
-                      orientation="vertical"
-                      size="middle"
-                      className="full"
-                    >
-                      <div>
-                        <Title level={4}>配置固件</Title>
-                        <Text type="secondary">留空时使用固件默认配置。</Text>
-                      </div>
-                      <Form layout="vertical" className="quick-form">
-                        <Form.Item label="主机名">
-                          <Input
-                            value={draft.hostname}
-                            placeholder="例如 ImmortalWrt"
-                            onChange={(e) =>
-                              patch({ hostname: e.target.value })
-                            }
-                          />
-                        </Form.Item>
-                        <Form.Item
-                          label="管理地址"
-                          extra="使用 IPv4/CIDR 格式，例如 192.168.1.1/24。"
-                        >
-                          <Input
-                            value={draft.address}
-                            placeholder="192.168.1.1/24"
-                            onChange={(e) => patch({ address: e.target.value })}
-                          />
-                        </Form.Item>
-                        <Form.Item label="时区">
-                          <Select
-                            allowClear
-                            value={draft.timezone || undefined}
-                            placeholder="使用固件默认时区"
-                            options={[
-                              {
-                                value: "Asia/Shanghai",
-                                label: "中国标准时间（上海）",
-                              },
-                              {
-                                value: "Asia/Hong_Kong",
-                                label: "中国标准时间（香港）",
-                              },
-                              { value: "Asia/Tokyo", label: "日本标准时间" },
-                              { value: "UTC", label: "UTC" },
-                            ]}
-                            onChange={(v) => patch({ timezone: v || "" })}
-                          />
-                        </Form.Item>
-                        <Form.Item
-                          label="管理员密码"
-                          extra="在本机生成密码哈希后写入固件，不保存明文到构建记录。"
-                        >
-                          <Input.Password
-                            autoComplete="new-password"
-                            value={draft.root_password}
-                            onChange={(e) =>
-                              patch({ root_password: e.target.value })
-                            }
-                          />
-                        </Form.Item>
-                        {wirelessSupported && (
-                          <>
-                            <Form.Item
-                              label="Wi-Fi 名称"
-                              extra="首次启动时对已有的无线 AP 接口生效；没有无线接口的设备会跳过。"
-                            >
-                              <Input
-                                value={draft.wifi_ssid}
-                                onChange={(e) =>
-                                  patch({ wifi_ssid: e.target.value })
-                                }
-                                maxLength={32}
-                              />
-                            </Form.Item>
-                            <Form.Item
-                              label="Wi-Fi 密码"
-                              extra="填写 Wi-Fi 时需同时设置 8–63 字节的密码。"
-                            >
-                              <Input.Password
-                                autoComplete="new-password"
-                                value={draft.wifi_password}
-                                onChange={(e) =>
-                                  patch({ wifi_password: e.target.value })
-                                }
-                              />
-                            </Form.Item>
-                          </>
-                        )}
-                        {pppSupported && (
-                          <>
-                            <Form.Item
-                              label="PPPoE 宽带账号"
-                              extra="仅在设备存在 WAN 配置时生效；构建时会加入 PPPoE 支持。"
-                            >
-                              <Input
-                                autoComplete="off"
-                                value={draft.ppp_username}
-                                onChange={(e) =>
-                                  patch({ ppp_username: e.target.value })
-                                }
-                              />
-                            </Form.Item>
-                            <Form.Item label="PPPoE 宽带密码">
-                              <Input.Password
-                                autoComplete="new-password"
-                                value={draft.ppp_password}
-                                onChange={(e) =>
-                                  patch({ ppp_password: e.target.value })
-                                }
-                              />
-                            </Form.Item>
-                          </>
-                        )}
-                        {profile?.rootfs_supported && (
-                          <Form.Item
-                            label="根分区大小（MiB）"
-                            extra="根据上游镜像文件格式推断；效果需以设备和镜像实际构建结果为准。"
-                          >
-                            <InputNumber
-                              min={64}
-                              max={32768}
-                              precision={0}
-                              value={draft.rootfs_size || null}
-                              onChange={(v) => patch({ rootfs_size: v || 0 })}
-                            />
-                          </Form.Item>
-                        )}
-                        <Alert
-                          type="info"
-                          showIcon
-                          title="固件包含设备配置"
-                          description="Wi-Fi 与 PPPoE 凭据需要写入固件，分享固件前请确认接收者可信。"
-                        />
-                      </Form>
-                      <Collapse
-                        items={[
-                          {
-                            key: "script",
-                            label: "高级选项：首次启动脚本",
-                            children: (
-                              <Form layout="vertical">
-                                <Form.Item
-                                  label="/etc/uci-defaults/99-custom.sh"
-                                  extra="可选；路由器首次启动时执行。"
-                                >
-                                  <Input.TextArea
-                                    rows={10}
-                                    className="mono"
-                                    placeholder={"#!/bin/sh\n\nexit 0"}
-                                    value={draft.script}
-                                    onChange={(e) =>
-                                      patch({ script: e.target.value })
-                                    }
-                                  />
-                                </Form.Item>
-                              </Form>
-                            ),
-                          },
-                        ]}
-                      />
-                    </Space>
+                    <FirmwareConfigStep
+                      draft={draft}
+                      patch={patch}
+                      profile={profile}
+                      wirelessSupported={wirelessSupported}
+                      pppSupported={pppSupported}
+                    />
                   )}
                   {step === 3 && (
-                    <Space
-                      orientation="vertical"
-                      size="middle"
-                      className="full"
-                    >
-                      <Title level={4}>确认构建</Title>
-                      <Descriptions
-                        bordered
-                        size="small"
-                        column={1}
-                        items={[
-                          {
-                            key: "device",
-                            label: "设备",
-                            children: draft.device,
-                          },
-                          {
-                            key: "target",
-                            label: "目标平台",
-                            children: `${draft.target} / ${draft.profile}`,
-                          },
-                          {
-                            key: "version",
-                            label: "系统版本",
-                            children: draft.version,
-                          },
-                          {
-                            key: "packages",
-                            label: "软件包",
-                            children: `新增 ${additionalCount} 项，移除 ${draft.remove.length} 项`,
-                          },
-                          {
-                            key: "theme",
-                            label: "LuCI 主题",
-                            children: draft.theme || "固件默认",
-                          },
-                          {
-                            key: "rootfs",
-                            label: "根分区",
-                            children: draft.rootfs_size
-                              ? `${draft.rootfs_size} MiB`
-                              : "固件默认",
-                          },
-                          ...(wirelessSupported
-                            ? [
-                                {
-                                  key: "wifi",
-                                  label: "无线网络",
-                                  children: draft.wifi_ssid || "默认",
-                                },
-                              ]
-                            : []),
-                          ...(pppSupported
-                            ? [
-                                {
-                                  key: "ppp",
-                                  label: "PPPoE",
-                                  children: draft.ppp_username
-                                    ? "已配置"
-                                    : "默认",
-                                },
-                              ]
-                            : []),
-                          {
-                            key: "address",
-                            label: "管理地址",
-                            children: draft.address || "默认",
-                          },
-                          {
-                            key: "script",
-                            label: "初始化脚本",
-                            children: draft.script ? "已填写" : "未填写",
-                          },
-                          {
-                            key: "mirror",
-                            label: "构建及固件默认软件源",
-                            children: draft.mirror,
-                          },
-                        ]}
-                      />
-                      {draft.mirror === "https://downloads.immortalwrt.org" && (
-                        <Alert
-                          type="warning"
-                          showIcon
-                          title="当前选择的是 ImmortalWrt 官方服务器"
-                        />
-                      )}
-                      <Alert
-                        type="warning"
-                        showIcon
-                        title="网络隔离尚未完成"
-                        description="当前会检查并改写软件源，但尚不能阻止容器内重定向或其他程序访问上游服务器。"
-                      />
-                      {!env?.available && (
-                        <Alert
-                          type="warning"
-                          showIcon
-                          title="构建环境不可用，请先检查。"
-                        />
-                      )}
-                    </Space>
+                    <ReviewStep
+                      draft={draft}
+                      additionalCount={additionalCount}
+                      wirelessSupported={wirelessSupported}
+                      pppSupported={pppSupported}
+                      env={env}
+                    />
                   )}
                   {step === 4 && job && (
                     <Space
@@ -1555,350 +1059,48 @@ function Workspace() {
             </>
           )}
           {page === "history" && (
-            <>
-              <Flex justify="space-between" className="page-title">
-                <div>
-                  <Title level={3}>构建记录</Title>
-                  <Text type="secondary">查看构建状态和固件产物。</Text>
-                </div>
-                {refresh}
-              </Flex>
-              <Card>
-                <Table<Job>
-                  rowKey="id"
-                  dataSource={jobs}
-                  pagination={{ pageSize: 10 }}
-                  locale={{ emptyText: <Empty description="暂无构建记录" /> }}
-                  columns={[
-                    {
-                      title: "设备",
-                      render: (_, j) => (
-                        <Space orientation="vertical" size={0}>
-                          <Text>{j.request.device}</Text>
-                          <Text type="secondary">
-                            {j.request.version} · {j.request.target}
-                          </Text>
-                        </Space>
-                      ),
-                    },
-                    {
-                      title: "创建时间",
-                      dataIndex: "created",
-                      render: (v) => new Date(v).toLocaleString(),
-                    },
-                    {
-                      title: "状态",
-                      dataIndex: "status",
-                      render: (v) => (
-                        <Tag
-                          color={
-                            v === "success"
-                              ? "success"
-                              : v === "failed"
-                                ? "error"
-                                : "default"
-                          }
-                        >
-                          {statuses[v] || v}
-                        </Tag>
-                      ),
-                    },
-                    {
-                      title: "操作",
-                      render: (_, j) => (
-                        <Space>
-                          <Tooltip title="查看详情">
-                            <Button
-                              type="text"
-                              aria-label={"查看 " + j.request.device}
-                              icon={<EyeOutlined />}
-                              onClick={() => showJob(j)}
-                            />
-                          </Tooltip>
-                          {!["queued", "running", "cleaned"].includes(
-                            j.status,
-                          ) && (
-                            <Tooltip title="清理产物">
-                              <Button
-                                type="text"
-                                danger
-                                aria-label={"清理 " + j.request.device}
-                                icon={<DeleteOutlined />}
-                                onClick={() => cleanup(j)}
-                              />
-                            </Tooltip>
-                          )}
-                        </Space>
-                      ),
-                    },
-                  ]}
-                />
-              </Card>
-            </>
+            <HistoryPage
+              jobs={jobs}
+              refresh={refresh}
+              statuses={statuses}
+              showJob={showJob}
+              cleanup={cleanup}
+            />
           )}
           {page === "sources" && (
-            <>
-              <div className="page-title">
-                <Title level={3}>软件源站</Title>
-                <Text type="secondary">
-                  管理设备目录、构建和固件默认软件源。
-                </Text>
-              </div>
-              <Card
-                title="软件源列表"
-                extra={<Text type="secondary">第一项为默认源</Text>}
-              >
-                <Form
-                  form={mirrorForm}
-                  layout="vertical"
-                  onFinish={saveMirrors}
-                >
-                  <Form.List
-                    name="mirrors"
-                    rules={[
-                      {
-                        validator: async (_, list: MirrorSource[]) => {
-                          if (!list?.length)
-                            throw new Error("请至少保留一个软件源");
-                          if (list.length > 32)
-                            throw new Error("最多添加 32 个软件源");
-                        },
-                      },
-                    ]}
-                  >
-                    {(fields, { add, remove }, { errors }) => (
-                      <>
-                        <div className="mirror-list-header">
-                          <span>镜像名称</span>
-                          <span>HTTPS 地址</span>
-                          <span />
-                        </div>
-                        {fields.map(({ key, name, ...rest }) => (
-                          <div className="mirror-row" key={key}>
-                            <Form.Item
-                              {...rest}
-                              name={[name, "name"]}
-                              rules={[
-                                {
-                                  required: true,
-                                  whitespace: true,
-                                  message: "请填写名称",
-                                },
-                                { max: 80 },
-                              ]}
-                            >
-                              <Input
-                                aria-label="镜像名称"
-                                placeholder="例如 南京大学"
-                                maxLength={80}
-                              />
-                            </Form.Item>
-                            <Form.Item
-                              {...rest}
-                              name={[name, "url"]}
-                              rules={[
-                                {
-                                  required: true,
-                                  whitespace: true,
-                                  message: "请填写地址",
-                                },
-                                { type: "url", message: "请输入有效地址" },
-                                {
-                                  pattern: /^https:\/\//,
-                                  message: "请使用 HTTPS",
-                                },
-                              ]}
-                            >
-                              <Input
-                                aria-label="镜像地址"
-                                placeholder="https://example.com/immortalwrt"
-                              />
-                            </Form.Item>
-                            <Tooltip title="删除">
-                              <Button
-                                aria-label="删除软件源"
-                                type="text"
-                                danger
-                                icon={<DeleteOutlined />}
-                                disabled={fields.length === 1}
-                                onClick={() => remove(name)}
-                              />
-                            </Tooltip>
-                          </div>
-                        ))}
-                        <Form.ErrorList errors={errors} />
-                        <Button
-                          icon={<PlusOutlined />}
-                          onClick={() => add({ name: "", url: "" })}
-                          disabled={fields.length >= 32}
-                        >
-                          添加软件源
-                        </Button>
-                      </>
-                    )}
-                  </Form.List>
-                  <div className="mirror-actions">
-                    <Button
-                      type="primary"
-                      htmlType="submit"
-                      loading={savingMirrors}
-                    >
-                      保存设置
-                    </Button>
-                  </div>
-                </Form>
-              </Card>
-            </>
+            <SourcesPage
+              mirrorForm={mirrorForm}
+              saveMirrors={saveMirrors}
+              savingMirrors={savingMirrors}
+            />
           )}
           {page === "environment" && (
-            <>
-              <Flex justify="space-between" className="page-title">
-                <div>
-                  <Title level={3}>构建环境</Title>
-                  <Text type="secondary">检查本机容器环境。</Text>
-                </div>
-                {refresh}
-              </Flex>
-              <Card
-                title={env?.name || "容器环境"}
-                extra={
-                  <Tag color={env?.available ? "success" : "default"}>
-                    {checkingEnv
-                      ? "检查中"
-                      : !env
-                        ? "未检查"
-                        : env.available
-                          ? "基本可访问"
-                          : "需要处理"}
-                  </Tag>
-                }
-              >
-                <Space orientation="vertical" className="full" size="middle">
-                  {!checkingEnv && env && !env.available && (
-                    <Alert
-                      type="info"
-                      showIcon
-                      title={
-                        env.name === "WSL Containers"
-                          ? "请安装或更新 WSL Containers。"
-                          : "请检查 Docker 是否已安装、启动且当前用户有访问权限。"
-                      }
-                      description={env?.message}
-                    />
-                  )}
-                  {env?.name === "WSL Containers" && (
-                    <Paragraph type="secondary">
-                      无需单独安装 Linux 发行版；安装可能需要管理员权限并重启。
-                    </Paragraph>
-                  )}
-                  {env?.name === "WSL Containers" && !env.available && (
-                    <Button
-                      loading={installing}
-                      onClick={async () => {
-                        setInstalling(true);
-                        try {
-                          const x = await api<{ message: string }>(
-                            "/environment/install-wsl",
-                            { method: "POST" },
-                          );
-                          void message.info(x.message);
-                        } catch (e) {
-                          error(e);
-                        } finally {
-                          setInstalling(false);
-                          await environment();
-                        }
-                      }}
-                    >
-                      安装 WSL 构建环境
-                    </Button>
-                  )}
-                </Space>
-              </Card>
-            </>
+            <EnvironmentPage
+              env={env}
+              checkingEnv={checkingEnv}
+              environment={environment}
+              error={error}
+              refresh={refresh}
+            />
           )}
           {page === "settings" && (
-            <>
-              <div className="page-title">
-                <Title level={3}>设置</Title>
-                <Text type="secondary">配置网络访问并查看本地数据目录。</Text>
-              </div>
-              <Space orientation="vertical" size="middle" className="full">
-                <Card title="查询代理">
-                  <Form layout="vertical">
-                    <Form.Item label="代理类型">
-                      <Select
-                        value={proxyType}
-                        onChange={setProxyType}
-                        options={[
-                          { value: "none", label: "不使用" },
-                          { value: "http", label: "HTTP" },
-                          { value: "socks5", label: "SOCKS5" },
-                        ]}
-                      />
-                    </Form.Item>
-                    {proxyType !== "none" && (
-                      <Form.Item
-                        label="代理地址"
-                        extra="填写地址和端口，例如 127.0.0.1:7890。"
-                      >
-                        <Input
-                          value={proxyAddress}
-                          onChange={(e) => setProxyAddress(e.target.value)}
-                          placeholder="127.0.0.1:7890"
-                        />
-                      </Form.Item>
-                    )}
-                    <Paragraph type="secondary">
-                      用于查询版本、设备、软件索引和 Docker Hub
-                      摘要；容器镜像拉取不使用此代理。
-                    </Paragraph>
-                    <Button
-                      type="primary"
-                      loading={savingProxy}
-                      onClick={saveProxy}
-                    >
-                      保存设置
-                    </Button>
-                  </Form>
-                </Card>
-                <Card title="Docker Hub 镜像加速">
-                  <Form layout="vertical">
-                    <Form.Item
-                      label="镜像仓库前缀"
-                      extra="可选，例如 mirror.example.com；留空直接使用 Docker Hub。加速失败时不会自动回退；获取镜像摘要仍需访问 Docker Hub。"
-                    >
-                      <Input
-                        value={registry}
-                        placeholder="留空使用 Docker Hub"
-                        onChange={(e) => setRegistry(e.target.value)}
-                      />
-                    </Form.Item>
-                    <Button type="primary" onClick={saveRegistry}>
-                      保存设置
-                    </Button>
-                  </Form>
-                </Card>
-                <Card title="本地数据">
-                  <Descriptions
-                    column={1}
-                    items={[
-                      { key: "data", label: "数据目录", children: dataDir },
-                      {
-                        key: "mirror",
-                        label: "当前软件源",
-                        children: draft.mirror,
-                      },
-                      {
-                        key: "env",
-                        label: "构建环境",
-                        children: env?.name || "未检查",
-                      },
-                    ]}
-                  />
-                </Card>
-              </Space>
-            </>
+            <SettingsPage
+              ecosystem={ecosystem}
+              switchingEcosystem={switchingEcosystem}
+              changeEcosystem={changeEcosystem}
+              proxyType={proxyType}
+              setProxyType={setProxyType}
+              proxyAddress={proxyAddress}
+              setProxyAddress={setProxyAddress}
+              savingProxy={savingProxy}
+              saveProxy={saveProxy}
+              registry={registry}
+              setRegistry={setRegistry}
+              saveRegistry={saveRegistry}
+              dataDir={dataDir}
+              mirror={draft.mirror}
+              environmentName={env?.name || "未检查"}
+            />
           )}
         </Content>
       </Layout>

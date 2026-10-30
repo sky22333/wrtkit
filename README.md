@@ -1,13 +1,13 @@
 # WrtKit
 
-WrtKit 是一个本地运行的 ImmortalWrt 固件可视化构建工具。选择设备和软件包，配置网络与系统选项，即可使用 ImageBuilder 构建固件。
+WrtKit 是一个本地运行的 ImmortalWrt 和 OpenWrt 固件可视化构建工具。选择设备和软件包，配置网络与系统选项，即可使用 ImageBuilder 构建固件。
 
 
 ## 使用
 
 - Windows：安装支持 WSL Containers 的 WSL，无需安装 Linux 发行版。
 - Linux：安装并启动 Docker Engine，确保当前用户可以访问 Docker socket。
-- 运行 WrtKit 后，在浏览器打开 `http://127.0.0.1:8088`，按页面提示选择软件源、版本、设备和软件包，然后开始构建。
+- 运行 WrtKit 后，在浏览器打开 `http://127.0.0.1:8088`。在系统设置选择固件生态，再选择软件源、版本、设备和软件包，开始构建。
 
 构建记录、日志和固件默认保存在运行目录的 `data` 文件夹，可在历史记录中查看和清理。可通过 `-data-dir` 指定数据目录。管理页面没有用户认证，请仅在本机使用。
 

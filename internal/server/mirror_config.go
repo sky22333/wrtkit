@@ -1,5 +1,19 @@
 package server
 
+func ecosystemMirrorScript(ecosystem, mirror string) string {
+	if ecosystem != openwrt {
+		return mirrorScript(mirror)
+	}
+	return `#!/bin/sh
+set -eu
+mirror=` + shellQuote(mirror) + `
+for file in /etc/opkg/distfeeds.conf /etc/apk/repositories.d/distfeeds.list; do
+ if [ -f "$file" ]; then sed -i "s|https\?://downloads.openwrt.org|$mirror|g" "$file"; fi
+done
+exit 0
+`
+}
+
 // mirrorScript configures both the live package-manager repository file and
 // ImmortalWrt's persistent initialization setting before upstream defaults run.
 // Detecting the files rather than relying on release numbers supports opkg and apk.

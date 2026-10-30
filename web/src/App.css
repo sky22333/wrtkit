@@ -10,6 +10,13 @@ body {
 .app-sider {
   border-right: 1px solid #f0f0f0;
 }
+.app-sider .ant-menu {
+  padding: 8px;
+}
+.app-sider .ant-menu-item {
+  width: 100%;
+  margin-inline: 0;
+}
 .brand {
   height: 64px;
   padding: 0 24px;
@@ -42,8 +49,31 @@ body {
   margin-bottom: 6px;
 }
 .step-content {
-  padding-top: 32px;
+  padding-top: 28px;
   min-height: 330px;
+  animation: step-enter 180ms ease-out both;
+}
+.build-workspace > .ant-card-body {
+  padding: 28px;
+}
+.build-steps {
+  padding: 4px 0 24px;
+  border-bottom: 1px solid #f0f0f0;
+}
+@keyframes step-enter {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .step-content {
+    animation: none;
+  }
 }
 .step-footer {
   border-top: 1px solid #f0f0f0;
@@ -82,6 +112,9 @@ body {
   }
   .app-content {
     padding: 20px 16px;
+  }
+  .build-workspace > .ant-card-body {
+    padding: 20px;
   }
 }
 

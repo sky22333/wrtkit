@@ -12,7 +12,10 @@ import (
 var imageDigest = regexp.MustCompile(`^sha256:[a-f0-9]{64}$`)
 
 func imageTag(b Build) string {
-	version := "openwrt-" + b.Version
+	version := b.Version
+	if b.Ecosystem != openwrt {
+		version = "openwrt-" + b.Version
+	}
 	if strings.HasSuffix(b.Version, "-SNAPSHOT") {
 		version = b.Version
 	}
@@ -54,11 +57,15 @@ func (a *App) preflight(ctx context.Context, b Build) (string, string, error) {
 	var image struct {
 		Digest string `json:"digest"`
 	}
-	if err := a.fetch(ctx, a.hubBase+"/v2/repositories/immortalwrt/imagebuilder/tags/"+url.PathEscape(tag), &image); err != nil {
+	repo := "immortalwrt/imagebuilder"
+	if b.Ecosystem == openwrt {
+		repo = "openwrt/imagebuilder"
+	}
+	if err := a.fetch(ctx, a.hubBase+"/v2/repositories/"+repo+"/tags/"+url.PathEscape(tag), &image); err != nil {
 		return "", "", fmt.Errorf("Docker Hub 中无法确认镜像 %s: %w", tag, err)
 	}
 	if !imageDigest.MatchString(image.Digest) {
 		return "", "", fmt.Errorf("Docker Hub 未返回有效的镜像摘要")
 	}
-	return "immortalwrt/imagebuilder@" + image.Digest, profile.Revision, nil
+	return repo + "@" + image.Digest, profile.Revision, nil
 }

@@ -204,7 +204,7 @@ func TestQuickSecretsNotPersisted(t *testing.T) {
 	}
 	defer a.Close()
 	a.client = upstream.Client()
-	body := `{"version":"25.12.2","target":"x86/64","profile":"generic","mirror":"` + upstream.URL + `","wifi_ssid":"wifi","wifi_password":"wireless-secret","root_password":"root-secret","ppp_username":"private-user","ppp_password":"ppp-secret"}`
+	body := `{"ecosystem":"immortalwrt","version":"25.12.2","target":"x86/64","profile":"generic","mirror":"` + upstream.URL + `","wifi_ssid":"wifi","wifi_password":"wireless-secret","root_password":"root-secret","ppp_username":"private-user","ppp_password":"ppp-secret"}`
 	req := httptest.NewRequest("POST", "/api/jobs", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()

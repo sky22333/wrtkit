@@ -48,6 +48,7 @@ type App struct {
 	proxyURL   *url.URL
 }
 type Build struct {
+	Ecosystem    string   `json:"ecosystem"`
 	Version      string   `json:"version"`
 	Target       string   `json:"target"`
 	Profile      string   `json:"profile"`
@@ -206,6 +207,7 @@ func (a *App) Router() http.Handler {
 	api.PUT("/settings", a.putSettings)
 	api.PUT("/settings/registry", a.putRegistry)
 	api.PUT("/settings/proxy", a.putProxy)
+	api.PUT("/settings/ecosystem", a.putEcosystem)
 	api.GET("/jobs", a.listJobs)
 	api.POST("/jobs", a.createJob)
 	api.GET("/jobs/:id", a.getJob)
@@ -390,15 +392,13 @@ func (a *App) profile(c *gin.Context) {
 	c.JSON(200, gin.H{"default_packages": data.Default, "device_packages": p.Packages, "images": p.Images, "arch": data.Arch, "revision": data.Revision, "rootfs_supported": diskImage(raw)})
 }
 func (a *App) getSettings(c *gin.Context) {
-	var raw string
-	err := a.db.QueryRow(`SELECT value FROM settings WHERE key='mirror_sources'`).Scan(&raw)
-	sources := defaultMirrors()
-	if err == nil {
-		if err = json.Unmarshal([]byte(raw), &sources); err != nil {
-			fail(c, 500, "软件源配置损坏")
-			return
-		}
-	} else if err != sql.ErrNoRows {
+	eco, err := a.ecosystem()
+	if err != nil {
+		fail(c, 500, err)
+		return
+	}
+	sources, err := a.mirrorsFor(eco)
+	if err != nil {
 		fail(c, 500, err)
 		return
 	}
@@ -408,9 +408,14 @@ func (a *App) getSettings(c *gin.Context) {
 		proxy = a.proxyURL.String()
 	}
 	a.proxyMu.RUnlock()
-	c.JSON(200, gin.H{"mirrors": sources, "registry": a.registry(), "proxy": proxy, "data_dir": a.dir})
+	c.JSON(200, gin.H{"ecosystem": eco, "mirrors": sources, "registry": a.registry(), "proxy": proxy, "data_dir": a.dir})
 }
 func (a *App) putSettings(c *gin.Context) {
+	eco, err := a.ecosystem()
+	if err != nil {
+		fail(c, 500, err)
+		return
+	}
 	var input struct {
 		Mirrors []mirrorSource `json:"mirrors"`
 	}
@@ -438,7 +443,7 @@ func (a *App) putSettings(c *gin.Context) {
 		fail(c, 500, err)
 		return
 	}
-	if _, err = a.db.Exec(`INSERT INTO settings VALUES('mirror_sources',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`, string(b)); err != nil {
+	if _, err = a.db.Exec(`INSERT INTO settings VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`, "mirror_sources_"+eco, string(b)); err != nil {
 		fail(c, 500, err)
 		return
 	}
@@ -498,6 +503,17 @@ func (a *App) createJob(c *gin.Context) {
 	if a.closing || len(a.active) > 0 {
 		a.mu.Unlock()
 		fail(c, 409, "已有构建任务正在运行")
+		return
+	}
+	eco, ecoErr := a.ecosystem()
+	if ecoErr != nil {
+		a.mu.Unlock()
+		fail(c, 500, ecoErr)
+		return
+	}
+	if b.Ecosystem != eco {
+		a.mu.Unlock()
+		fail(c, 409, "固件生态已改变，请刷新页面")
 		return
 	}
 	randb := make([]byte, 12)
@@ -638,8 +654,8 @@ func firmwareFiles(b Build) (map[string][]byte, error) {
 		return nil, err
 	}
 	files := map[string][]byte{
-		"wrtkit/run.sh": []byte(runScript),
-		"wrtkit/files/etc/uci-defaults/09-wrtkit-mirror": []byte(mirrorScript(b.Mirror)),
+		"wrtkit/run.sh": []byte(builderScript(b.Ecosystem)),
+		"wrtkit/files/etc/uci-defaults/09-wrtkit-mirror": []byte(ecosystemMirrorScript(b.Ecosystem, b.Mirror)),
 		"wrtkit/files/etc/uci-defaults/10-wrtkit":        []byte(script),
 	}
 	if b.Theme != "" {
@@ -661,14 +677,21 @@ func isFirmware(name string) bool {
 	return false
 }
 
-const runScript = `set -eu
-cd /home/build/immortalwrt
+func builderScript(ecosystem string) string {
+	prefix := "cd /home/build/immortalwrt\n"
+	if ecosystem == openwrt {
+		prefix = "cd /builder\nif [ ! -d scripts ]; then UPSTREAM_URL=\"$WRT_MIRROR\" bash ./setup.sh; fi\n"
+	}
+	return "set -eu\n" + prefix + builderScriptBody
+}
+
+const builderScriptBody = `
 if ! grep -Fqx "REVISION:=${WRT_REVISION}" include/version.mk; then echo "构建镜像与软件源的修订号不一致，请更换镜像或稍后重试"; exit 1; fi
 mkdir -p /tmp/wrtkit-work/output
 cp -R /tmp/wrtkit/files /tmp/wrtkit-work/files
 for f in repositories repositories.conf; do
  if [ -f "$f" ]; then
-  sed -i "s|https://downloads.immortalwrt.org|${WRT_MIRROR}|g;s|https://immortalwrt.kyarucloud.moe|${WRT_MIRROR}|g;s|https://mirrors.vsean.net/openwrt|${WRT_MIRROR}|g" "$f"
+  sed -i "s|https://downloads.immortalwrt.org|${WRT_MIRROR}|g;s|https://immortalwrt.kyarucloud.moe|${WRT_MIRROR}|g;s|https://mirrors.vsean.net/openwrt|${WRT_MIRROR}|g;s|https\?://downloads.openwrt.org|${WRT_MIRROR}|g" "$f"
   for url in $(grep -Eo 'https?://[^[:space:]]+' "$f" || true); do
    case "$url" in "$WRT_MIRROR"/*) ;; *) echo "软件源地址不属于所选镜像: $url"; exit 1 ;; esac
   done
