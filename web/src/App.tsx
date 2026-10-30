@@ -23,7 +23,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   App as AntApp,
-  Badge,
   Button,
   Card,
   ConfigProvider,
@@ -42,6 +41,7 @@ import {
   AppstoreOutlined,
   BuildOutlined,
   CheckCircleOutlined,
+  CloseCircleOutlined,
   CloudServerOutlined,
   DeleteOutlined,
   DownloadOutlined,
@@ -50,6 +50,7 @@ import {
   FolderOpenOutlined,
   HistoryOutlined,
   HddOutlined,
+  LoadingOutlined,
   ReloadOutlined,
   SettingOutlined,
   StopOutlined,
@@ -64,7 +65,7 @@ import {
 import { formatBytes } from "./format";
 import "./App.css";
 
-const { Header, Content, Sider } = Layout;
+const { Content, Sider } = Layout;
 const { Title, Text } = Typography;
 
 const statuses: Record<string, string> = {
@@ -772,39 +773,6 @@ function Workspace() {
         />
       </Sider>
       <Layout>
-        <Header className="app-header">
-          <Text type="secondary">{nav.find((x) => x.key === page)?.label}</Text>
-          <Space size="small">
-            <Badge
-              status={
-                checkingEnv
-                  ? "processing"
-                  : env?.available
-                    ? "success"
-                    : env
-                      ? "error"
-                      : "default"
-              }
-              text={
-                checkingEnv
-                  ? "检查中"
-                  : env?.available
-                    ? "环境就绪"
-                    : env
-                      ? "环境不可用"
-                      : "环境待检查"
-              }
-            />
-            <Tooltip title="检查构建环境">
-              <Button
-                type="text"
-                aria-label="检查构建环境"
-                icon={<ReloadOutlined />}
-                onClick={environment}
-              />
-            </Tooltip>
-          </Space>
-        </Header>
         <Content className="app-content">
           {page === "build" && (
             <>
@@ -911,7 +879,18 @@ function Workspace() {
                       <Flex justify="space-between">
                         <div>
                           <Title level={4}>
-                            {statuses[job.status] || job.status}
+                            <Space>
+                              {["queued", "running"].includes(job.status) ? (
+                                <LoadingOutlined />
+                              ) : job.status === "success" ? (
+                                <CheckCircleOutlined />
+                              ) : job.status === "failed" ? (
+                                <CloseCircleOutlined />
+                              ) : (
+                                <FileTextOutlined />
+                              )}
+                              {statuses[job.status] || job.status}
+                            </Space>
                           </Title>
                           <Text type="secondary">
                             {job.stage} · {job.request.device}

@@ -97,12 +97,6 @@ export function ReviewStep({
           title="当前选择的是 ImmortalWrt 官方服务器"
         />
       )}
-      <Alert
-        type="warning"
-        showIcon
-        title="网络隔离尚未完成"
-        description="当前会检查并改写软件源，但尚不能阻止容器内重定向或其他程序访问上游服务器。"
-      />
       {!env?.available && (
         <Alert type="warning" showIcon title="构建环境不可用，请先检查。" />
       )}

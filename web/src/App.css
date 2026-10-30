@@ -25,15 +25,6 @@ body {
   gap: 10px;
   font-size: 17px;
 }
-.app-header {
-  height: 64px;
-  padding: 0 32px;
-  background: #fff;
-  border-bottom: 1px solid #f0f0f0;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
 .app-content {
   width: 100%;
   max-width: 1250px;
@@ -107,9 +98,6 @@ body {
   font-size: 12px;
 }
 @media (max-width: 768px) {
-  .app-header {
-    padding: 0 16px;
-  }
   .app-content {
     padding: 20px 16px;
   }
@@ -122,9 +110,6 @@ body {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   column-gap: 24px;
-}
-.quick-form > .ant-alert {
-  grid-column: 1 / -1;
 }
 @media (max-width: 768px) {
   .quick-form {

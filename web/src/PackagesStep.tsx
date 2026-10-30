@@ -13,7 +13,11 @@ import {
   Tooltip,
   Typography,
 } from "antd";
-import { PlusOutlined } from "@ant-design/icons";
+import {
+  CheckSquareOutlined,
+  AppstoreOutlined,
+  PlusOutlined,
+} from "@ant-design/icons";
 import type { Dispatch, SetStateAction } from "react";
 import type { Build, Package } from "./types";
 const { Title, Text } = Typography;
@@ -78,7 +82,12 @@ export function PackagesStep({
       )}
       <Card
         size="small"
-        title="已选择的软件包"
+        title={
+          <Space>
+            <CheckSquareOutlined />
+            已选择的软件包
+          </Space>
+        }
         extra={<Text type="secondary">{selectedPackages.length} 项</Text>}
       >
         <Text type="secondary">
@@ -127,7 +136,15 @@ export function PackagesStep({
           </div>
         )}
       </Card>
-      <Card size="small" title="软件包目录">
+      <Card
+        size="small"
+        title={
+          <Space>
+            <AppstoreOutlined />
+            软件包目录
+          </Space>
+        }
+      >
         <Space orientation="vertical" className="full" size="middle">
           <Text type="secondary">
             软件来自所选设备的软件源，自动安装中文版本；依赖由构建环境解析。

@@ -8,6 +8,7 @@ import {
   Typography,
 } from "antd";
 import type { Build, Profile } from "./types";
+import { CodeOutlined } from "@ant-design/icons";
 const { Title, Text } = Typography;
 type Props = {
   draft: Build;
@@ -124,13 +125,16 @@ export function FirmwareConfigStep({
         )}
         {profile?.rootfs_supported && (
           <Form.Item
-            label="根分区大小（MiB）"
-            extra="根据上游镜像文件格式推断；效果需以设备和镜像实际构建结果为准。"
+            label="根分区大小"
+            extra="留空使用固件默认大小。"
           >
             <InputNumber
+              className="full"
               min={64}
               max={32768}
               precision={0}
+              placeholder="使用固件默认大小"
+              suffix="MiB"
               value={draft.rootfs_size || null}
               onChange={(v) => patch({ rootfs_size: v || 0 })}
             />
@@ -138,25 +142,30 @@ export function FirmwareConfigStep({
         )}
       </Form>
       <Collapse
+        ghost
         items={[
           {
             key: "script",
-            label: "高级选项：首次启动脚本",
+            label: (
+              <Space>
+                <CodeOutlined />
+                高级选项：首次启动脚本
+              </Space>
+            ),
             children: (
-              <Form layout="vertical">
-                <Form.Item
-                  label="/etc/uci-defaults/99-custom.sh"
-                  extra="可选；路由器首次启动时执行。"
-                >
-                  <Input.TextArea
-                    rows={10}
-                    className="mono"
-                    placeholder={"#!/bin/sh\n\nexit 0"}
-                    value={draft.script}
-                    onChange={(e) => patch({ script: e.target.value })}
-                  />
-                </Form.Item>
-              </Form>
+              <Space orientation="vertical" size="small" className="full">
+                <Text type="secondary">
+                  /etc/uci-defaults/99-custom.sh · 首次启动时执行
+                </Text>
+                <Input.TextArea
+                  aria-label="首次启动脚本"
+                  rows={10}
+                  className="mono"
+                  placeholder={"#!/bin/sh\n\nexit 0"}
+                  value={draft.script}
+                  onChange={(e) => patch({ script: e.target.value })}
+                />
+              </Space>
             ),
           },
         ]}

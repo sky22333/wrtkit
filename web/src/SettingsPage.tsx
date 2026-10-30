@@ -8,6 +8,12 @@ import {
   Space,
   Typography,
 } from "antd";
+import {
+  CloudDownloadOutlined,
+  DatabaseOutlined,
+  GlobalOutlined,
+  PartitionOutlined,
+} from "@ant-design/icons";
 
 const { Title, Text, Paragraph } = Typography;
 type Props = {
@@ -51,7 +57,14 @@ export function SettingsPage({
         <Text type="secondary">配置网络访问并查看本地数据目录。</Text>
       </div>
       <Space orientation="vertical" size="middle" className="full">
-        <Card title="固件生态">
+        <Card
+          title={
+            <Space>
+              <PartitionOutlined />
+              固件生态
+            </Space>
+          }
+        >
           <Select
             className="full"
             value={ecosystem}
@@ -64,7 +77,14 @@ export function SettingsPage({
             ]}
           />
         </Card>
-        <Card title="查询代理">
+        <Card
+          title={
+            <Space>
+              <GlobalOutlined />
+              查询代理
+            </Space>
+          }
+        >
           <Form layout="vertical">
             <Form.Item label="代理类型">
               <Select
@@ -98,7 +118,14 @@ export function SettingsPage({
             </Button>
           </Form>
         </Card>
-        <Card title="Docker Hub 镜像加速">
+        <Card
+          title={
+            <Space>
+              <CloudDownloadOutlined />
+              Docker Hub 镜像加速
+            </Space>
+          }
+        >
           <Form layout="vertical">
             <Form.Item
               label="镜像仓库前缀"
@@ -115,7 +142,14 @@ export function SettingsPage({
             </Button>
           </Form>
         </Card>
-        <Card title="本地数据">
+        <Card
+          title={
+            <Space>
+              <DatabaseOutlined />
+              本地数据
+            </Space>
+          }
+        >
           <Descriptions
             column={1}
             items={[
