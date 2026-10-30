@@ -164,6 +164,9 @@ function Workspace() {
   const [mirrorForm] = Form.useForm<{ mirrors: MirrorSource[] }>();
   const [savingMirrors, setSavingMirrors] = useState(false);
   const [registry, setRegistry] = useState("");
+  const [proxyType, setProxyType] = useState("none");
+  const [proxyAddress, setProxyAddress] = useState("");
+  const [savingProxy, setSavingProxy] = useState(false);
   const [dataDir, setDataDir] = useState("");
   const [versions, setVersions] = useState<string[]>([]);
   const [deviceVersion, setDeviceVersion] = useState("");
@@ -180,6 +183,8 @@ function Workspace() {
   const initializedDevice = useRef(false);
   const [packageFeed, setPackageFeed] = useState("all");
   const [env, setEnv] = useState<Environment | null>(null);
+  const [checkingEnv, setCheckingEnv] = useState(true);
+  const [installing, setInstalling] = useState(false);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [job, setJob] = useState<Job | null>(null);
   const [artifacts, setArtifacts] = useState<Artifact[]>([]);
@@ -195,10 +200,14 @@ function Workspace() {
     [message],
   );
   const environment = useCallback(async () => {
+    setCheckingEnv(true);
     try {
       setEnv(await api("/environment"));
     } catch (e) {
+      setEnv(null);
       error(e);
+    } finally {
+      setCheckingEnv(false);
     }
   }, [error]);
   const loadJobs = useCallback(async () => {
@@ -209,12 +218,23 @@ function Workspace() {
     }
   }, [error]);
   useEffect(() => {
-    api<Environment>("/environment").then(setEnv).catch(error);
-    api<{ mirrors: MirrorSource[]; registry: string; data_dir: string }>(
-      "/settings",
-    )
+    api<Environment>("/environment")
+      .then(setEnv)
+      .catch(error)
+      .finally(() => setCheckingEnv(false));
+    api<{
+      mirrors: MirrorSource[];
+      registry: string;
+      proxy: string;
+      data_dir: string;
+    }>("/settings")
       .then((x) => {
         setRegistry(x.registry);
+        if (x.proxy) {
+          const [kind, address] = x.proxy.split("://");
+          setProxyType(kind);
+          setProxyAddress(address);
+        }
         setDataDir(x.data_dir);
         setMirrors(x.mirrors);
         mirrorForm.setFieldsValue({ mirrors: x.mirrors });
@@ -648,6 +668,23 @@ function Workspace() {
       setSavingMirrors(false);
     }
   };
+  const saveProxy = async () => {
+    setSavingProxy(true);
+    try {
+      await api("/settings/proxy", {
+        method: "PUT",
+        body: JSON.stringify({
+          proxy:
+            proxyType === "none" ? "" : `${proxyType}://${proxyAddress.trim()}`,
+        }),
+      });
+      void message.success("代理设置已保存");
+    } catch (e) {
+      error(e);
+    } finally {
+      setSavingProxy(false);
+    }
+  };
   const saveRegistry = async () => {
     try {
       const result = await api<{ registry: string }>("/settings/registry", {
@@ -751,7 +788,10 @@ function Workspace() {
           mode="inline"
           selectedKeys={[page]}
           items={nav}
-          onClick={({ key }) => setPage(key)}
+          onClick={({ key }) => {
+            setPage(key);
+            if (key === "environment") void environment();
+          }}
         />
       </Sider>
       <Layout>
@@ -1723,32 +1763,52 @@ function Workspace() {
                 title={env?.name || "容器环境"}
                 extra={
                   <Tag color={env?.available ? "success" : "default"}>
-                    {env?.available ? "可用" : "不可用"}
+                    {checkingEnv
+                      ? "检查中"
+                      : !env
+                        ? "未检查"
+                        : env.available
+                          ? "基本可访问"
+                          : "需要处理"}
                   </Tag>
                 }
               >
                 <Space orientation="vertical" className="full" size="middle">
-                  {!env?.available && (
+                  {!checkingEnv && env && !env.available && (
                     <Alert
                       type="info"
                       showIcon
-                      title="Windows 请安装 WSL Containers；Linux 请安装并启动 Docker。"
+                      title={
+                        env.name === "WSL Containers"
+                          ? "请安装或更新 WSL Containers。"
+                          : "请检查 Docker 是否已安装、启动且当前用户有访问权限。"
+                      }
                       description={env?.message}
                     />
                   )}
-                  <Paragraph type="secondary">
-                    Windows 使用 WSL Containers，无需安装单独的 Linux
-                    发行版。安装可能需要管理员权限并重启。
-                  </Paragraph>
+                  {env?.name === "WSL Containers" && (
+                    <Paragraph type="secondary">
+                      无需单独安装 Linux 发行版；安装可能需要管理员权限并重启。
+                    </Paragraph>
+                  )}
                   {env?.name === "WSL Containers" && !env.available && (
                     <Button
-                      onClick={() =>
-                        api<{ message: string }>("/environment/install-wsl", {
-                          method: "POST",
-                        })
-                          .then((x) => message.info(x.message))
-                          .catch(error)
-                      }
+                      loading={installing}
+                      onClick={async () => {
+                        setInstalling(true);
+                        try {
+                          const x = await api<{ message: string }>(
+                            "/environment/install-wsl",
+                            { method: "POST" },
+                          );
+                          void message.info(x.message);
+                        } catch (e) {
+                          error(e);
+                        } finally {
+                          setInstalling(false);
+                          await environment();
+                        }
+                      }}
                     >
                       安装 WSL 构建环境
                     </Button>
@@ -1761,9 +1821,47 @@ function Workspace() {
             <>
               <div className="page-title">
                 <Title level={3}>设置</Title>
-                <Text type="secondary">配置镜像加速并查看本地数据目录。</Text>
+                <Text type="secondary">配置网络访问并查看本地数据目录。</Text>
               </div>
               <Space orientation="vertical" size="middle" className="full">
+                <Card title="查询代理">
+                  <Form layout="vertical">
+                    <Form.Item label="代理类型">
+                      <Select
+                        value={proxyType}
+                        onChange={setProxyType}
+                        options={[
+                          { value: "none", label: "不使用" },
+                          { value: "http", label: "HTTP" },
+                          { value: "socks5", label: "SOCKS5" },
+                        ]}
+                      />
+                    </Form.Item>
+                    {proxyType !== "none" && (
+                      <Form.Item
+                        label="代理地址"
+                        extra="填写地址和端口，例如 127.0.0.1:7890。"
+                      >
+                        <Input
+                          value={proxyAddress}
+                          onChange={(e) => setProxyAddress(e.target.value)}
+                          placeholder="127.0.0.1:7890"
+                        />
+                      </Form.Item>
+                    )}
+                    <Paragraph type="secondary">
+                      用于查询版本、设备、软件索引和 Docker Hub
+                      摘要；容器镜像拉取不使用此代理。
+                    </Paragraph>
+                    <Button
+                      type="primary"
+                      loading={savingProxy}
+                      onClick={saveProxy}
+                    >
+                      保存设置
+                    </Button>
+                  </Form>
+                </Card>
                 <Card title="Docker Hub 镜像加速">
                   <Form layout="vertical">
                     <Form.Item

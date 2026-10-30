@@ -34,15 +34,18 @@ var validPart = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._+,-]*$`)
 var validVersion = regexp.MustCompile(`^(23\.(?:0[5-9]|1[0-2])|(?:2[4-9]|[3-9][0-9])\.(?:0[1-9]|1[0-2]))(\.[0-9]+|-SNAPSHOT)$`)
 
 type App struct {
-	db      *sql.DB
-	dir     string
-	client  *http.Client
-	hubBase string
-	mu      sync.Mutex
-	wg      sync.WaitGroup
-	closing bool
-	active  map[string]context.CancelFunc
-	engine  func() runtime.Engine
+	db         *sql.DB
+	dir        string
+	client     *http.Client
+	hubBase    string
+	mu         sync.Mutex
+	wg         sync.WaitGroup
+	closing    bool
+	installing bool
+	active     map[string]context.CancelFunc
+	engine     func() runtime.Engine
+	proxyMu    sync.RWMutex
+	proxyURL   *url.URL
 }
 type Build struct {
 	Version      string   `json:"version"`
@@ -98,7 +101,18 @@ func New(dir string) (*App, error) {
 	if e != nil {
 		return nil, e
 	}
-	a := &App{db: db, dir: dir, hubBase: "https://hub.docker.com", engine: runtime.Current, client: &http.Client{Transport: userAgentTransport{http.DefaultTransport}, Timeout: 25 * time.Second, CheckRedirect: func(req *http.Request, via []*http.Request) error {
+	a := &App{db: db, dir: dir, hubBase: "https://hub.docker.com", engine: runtime.Current, active: map[string]context.CancelFunc{}}
+	if err := a.loadProxy(); err != nil {
+		db.Close()
+		return nil, err
+	}
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.Proxy = func(*http.Request) (*url.URL, error) {
+		a.proxyMu.RLock()
+		defer a.proxyMu.RUnlock()
+		return a.proxyURL, nil
+	}
+	a.client = &http.Client{Transport: userAgentTransport{transport}, Timeout: 25 * time.Second, CheckRedirect: func(req *http.Request, via []*http.Request) error {
 		if forbidden(req.URL.Hostname()) && !(strings.EqualFold(req.URL.Hostname(), "downloads.immortalwrt.org") && len(via) > 0 && strings.EqualFold(via[0].URL.Hostname(), "downloads.immortalwrt.org")) {
 			return fmt.Errorf("镜像重定向到未选择的上游服务器")
 		}
@@ -106,7 +120,7 @@ func New(dir string) (*App, error) {
 			return fmt.Errorf("重定向次数过多")
 		}
 		return nil
-	}}, active: map[string]context.CancelFunc{}}
+	}}
 	return a, nil
 }
 func (a *App) Close() {
@@ -169,11 +183,20 @@ func (a *App) Router() http.Handler {
 	api := r.Group("/api")
 	api.GET("/environment", a.environment)
 	api.POST("/environment/install-wsl", func(c *gin.Context) {
+		a.mu.Lock()
+		if a.installing {
+			a.mu.Unlock()
+			fail(c, 409, "安装正在进行")
+			return
+		}
+		a.installing = true
+		a.mu.Unlock()
+		defer func() { a.mu.Lock(); a.installing = false; a.mu.Unlock() }()
 		if e := launchWSLInstall(); e != nil {
 			fail(c, 500, e)
 			return
 		}
-		c.JSON(200, gin.H{"message": "已请求启动安装，请完成系统提示，结束后重新检查。"})
+		c.JSON(200, gin.H{"message": "安装程序已结束，请检查环境；如有提示请先重启系统。"})
 	})
 	api.GET("/versions", a.versions)
 	api.GET("/devices", a.devices)
@@ -182,6 +205,7 @@ func (a *App) Router() http.Handler {
 	api.GET("/settings", a.getSettings)
 	api.PUT("/settings", a.putSettings)
 	api.PUT("/settings/registry", a.putRegistry)
+	api.PUT("/settings/proxy", a.putProxy)
 	api.GET("/jobs", a.listJobs)
 	api.POST("/jobs", a.createJob)
 	api.GET("/jobs/:id", a.getJob)
@@ -218,7 +242,11 @@ func (a *App) environment(c *gin.Context) {
 	if os.PathSeparator == '\\' {
 		name = "WSL Containers"
 	}
-	c.JSON(200, gin.H{"name": name, "available": e == nil, "message": fmt.Sprint(e)})
+	message := ""
+	if e != nil {
+		message = e.Error()
+	}
+	c.JSON(200, gin.H{"name": name, "available": e == nil, "message": message})
 }
 func (a *App) versions(c *gin.Context) {
 	m := mirror(c)
@@ -374,7 +402,13 @@ func (a *App) getSettings(c *gin.Context) {
 		fail(c, 500, err)
 		return
 	}
-	c.JSON(200, gin.H{"mirrors": sources, "registry": a.registry(), "data_dir": a.dir})
+	a.proxyMu.RLock()
+	proxy := ""
+	if a.proxyURL != nil {
+		proxy = a.proxyURL.String()
+	}
+	a.proxyMu.RUnlock()
+	c.JSON(200, gin.H{"mirrors": sources, "registry": a.registry(), "proxy": proxy, "data_dir": a.dir})
 }
 func (a *App) putSettings(c *gin.Context) {
 	var input struct {
@@ -510,6 +544,13 @@ func (a *App) execute(ctx context.Context, id string, b Build) {
 		return
 	}
 	defer f.Close()
+	checkCtx, checkCancel := context.WithTimeout(ctx, 4*time.Second)
+	checkErr := a.engine().Check(checkCtx)
+	checkCancel()
+	if checkErr != nil {
+		a.update(id, "failed", "构建环境不可用", checkErr.Error())
+		return
+	}
 	a.update(id, "running", "检查设备和构建镜像", "")
 	image, revision, e := a.preflight(ctx, b)
 	if e != nil {

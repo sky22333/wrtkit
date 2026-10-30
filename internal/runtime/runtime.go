@@ -323,7 +323,7 @@ func wslcPath() string {
 }
 
 func (*WSL) Check(ctx context.Context) error {
-	c := exec.CommandContext(ctx, wslcPath(), "version")
+	c := exec.CommandContext(ctx, wslcPath(), "info")
 	out, e := c.CombinedOutput()
 	if e != nil {
 		return fmt.Errorf("wslc 不可用: %s: %w", strings.TrimSpace(string(out)), e)
