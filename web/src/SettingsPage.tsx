@@ -96,12 +96,12 @@ export function SettingsPage({
             {proxyType !== "none" && (
               <Form.Item
                 label="代理地址"
-                extra="填写地址和端口，例如 127.0.0.1:7890。"
+                extra="填写地址和端口，例如 127.0.0.1:10808。"
               >
                 <Input
                   value={proxyAddress}
                   onChange={(e) => setProxyAddress(e.target.value)}
-                  placeholder="127.0.0.1:7890"
+                  placeholder="127.0.0.1:10808"
                 />
               </Form.Item>
             )}
@@ -125,7 +125,7 @@ export function SettingsPage({
           <Form layout="vertical">
             <Form.Item
               label="镜像仓库前缀"
-              extra="可选，例如 mirror.example.com；留空直接使用 Docker Hub。加速失败时不会自动回退；获取镜像摘要仍需访问 Docker Hub。"
+              extra="可选，例如 docker.1panel.live；留空使用Docker官方仓库。"
             >
               <Input
                 value={registry}
