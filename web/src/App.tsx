@@ -1,3 +1,4 @@
+import { retryBody, type BuildAttempt } from "./buildRetry";
 import { LoginPage } from "./LoginPage";
 import { initialBuild } from "./defaults";
 import { ReviewStep } from "./ReviewStep";
@@ -91,6 +92,7 @@ const nav = [
 function Workspace({ onLogout }: { onLogout: () => void }) {
   const { message, modal } = AntApp.useApp();
   const [starting, setStarting] = useState(false);
+  const [lastAttempt, setLastAttempt] = useState<BuildAttempt | null>(null);
   const [page, setPage] = useState("build");
   const [step, setStep] = useState(0);
   const [draft, setDraft] = useState<Build>(initialBuild);
@@ -578,20 +580,21 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
     }
     setStep(step + 1);
   };
-  const start = async () => {
+  const start = async (previousBody?: string) => {
     if (starting) return;
     setStarting(true);
     try {
-      const x = await api<{ id: string }>("/jobs", {
-        method: "POST",
-        body: JSON.stringify({
+      const body =
+        previousBody ??
+        JSON.stringify({
           ...draft,
           ecosystem,
           packages: additionalPackages,
           ...(wirelessSupported ? {} : { wifi_ssid: "", wifi_password: "" }),
           ...(pppSupported ? {} : { ppp_username: "", ppp_password: "" }),
-        }),
-      });
+        });
+      const x = await api<{ id: string }>("/jobs", { method: "POST", body });
+      setLastAttempt({ jobId: x.id, body });
       setLog("");
       setArtifacts([]);
       setJob(await api("/jobs/" + x.id));
@@ -754,6 +757,18 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
     setPage("build");
     setStep(4);
   };
+  const newBuild = () => {
+    setLastAttempt(null);
+    initializedDevice.current = false;
+    setDraft({ ...initialBuild, mirror: draft.mirror });
+    setProfile(null);
+    setPackageData([]);
+    setPackageWarnings([]);
+    setPackageError("");
+    setJob(null);
+    setStep(0);
+  };
+  const retryRequest = job ? retryBody(lastAttempt, job.id) : null;
   const refresh = (
     <Tooltip title="刷新">
       <Button
@@ -923,6 +938,16 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
                       {job.error && (
                         <Alert type="error" showIcon title={job.error} />
                       )}
+                      {["failed", "cancelled", "interrupted"].includes(
+                        job.status,
+                      ) &&
+                        !retryRequest && (
+                          <Alert
+                            type="info"
+                            showIcon
+                            title="原构建的敏感配置未保存，请新建构建并重新填写配置。"
+                          />
+                        )}
                       <Card
                         size="small"
                         title={
@@ -1029,11 +1054,26 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
                         type="primary"
                         loading={starting}
                         disabled={!env?.available}
-                        onClick={start}
+                        onClick={() => void start()}
                       >
                         开始构建
                       </Button>
                     )}
+                    {step === 4 &&
+                      job &&
+                      retryRequest &&
+                      ["failed", "cancelled", "interrupted"].includes(
+                        job.status,
+                      ) && (
+                        <Button
+                          type="primary"
+                          icon={<ReloadOutlined />}
+                          loading={starting}
+                          onClick={() => void start(retryRequest)}
+                        >
+                          重新构建
+                        </Button>
+                      )}
                     {step === 4 &&
                       job &&
                       !["queued", "running", "cleaned"].includes(
@@ -1049,14 +1089,7 @@ function Workspace({ onLogout }: { onLogout: () => void }) {
                       )}
                     {step === 4 &&
                       !["queued", "running"].includes(job?.status || "") && (
-                        <Button
-                          onClick={() => {
-                            setStep(0);
-                            setJob(null);
-                          }}
-                        >
-                          新建构建
-                        </Button>
+                        <Button onClick={newBuild}>新建构建</Button>
                       )}
                   </Space>
                 </Flex>
