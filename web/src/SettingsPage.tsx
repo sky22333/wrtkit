@@ -15,7 +15,7 @@ import {
   PartitionOutlined,
 } from "@ant-design/icons";
 
-const { Title, Text, Paragraph } = Typography;
+const { Paragraph } = Typography;
 type Props = {
   ecosystem: string;
   switchingEcosystem: boolean;
@@ -52,10 +52,6 @@ export function SettingsPage({
 }: Props) {
   return (
     <>
-      <div className="page-title">
-        <Title level={3}>设置</Title>
-        <Text type="secondary">配置网络访问并查看本地数据目录。</Text>
-      </div>
       <Space orientation="vertical" size="middle" className="full">
         <Card
           title={
@@ -171,3 +167,4 @@ export function SettingsPage({
     </>
   );
 }
+

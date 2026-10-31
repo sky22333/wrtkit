@@ -105,6 +105,16 @@ func quickScript(b Build) (string, error) {
 
 // Themes register themselves in their uci-defaults scripts; apply the choice afterwards.
 func themeScript(theme string) string {
-	name := strings.TrimPrefix(theme, "luci-theme-")
-	return "#!/bin/sh\nset -e\ndir=" + shellQuote("/luci-static/"+name) + "\nif [ -d \"/www$dir\" ] && uci -q get luci.main >/dev/null; then\n uci set \"luci.main.mediaurlbase=$dir\"\n uci commit luci\nelse echo '未找到主题目录，保留当前主题' >&2; fi\nexit 0\n"
+	paths := map[string]string{
+		"luci-theme-argon":        "/luci-static/argon",
+		"luci-theme-bootstrap":    "/luci-static/bootstrap",
+		"luci-theme-material":     "/luci-static/material",
+		"luci-theme-openwrt":      "/luci-static/openwrt.org",
+		"luci-theme-openwrt-2020": "/luci-static/openwrt2020",
+	}
+	path := paths[theme]
+	if path == "" {
+		return ""
+	}
+	return "#!/bin/sh\nset -e\ndir=" + shellQuote(path) + "\nif [ -d \"/www$dir\" ] && uci -q get luci.main >/dev/null; then\n uci set \"luci.main.mediaurlbase=$dir\"\n uci commit luci\nelse echo '未找到主题目录，保留当前主题' >&2; fi\nexit 0\n"
 }

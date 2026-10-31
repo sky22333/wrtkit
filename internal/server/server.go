@@ -312,12 +312,6 @@ func (a *App) versions(c *gin.Context) {
 func (a *App) devices(c *gin.Context) {
 	m := mirror(c)
 	v := c.Query("version")
-	q := strings.ToLower(strings.TrimSpace(c.Query("q")))
-	page, err := strconv.Atoi(c.DefaultQuery("page", "1"))
-	if err != nil || page < 1 || page > 100000 {
-		fail(c, 400, "页码无效")
-		return
-	}
 	if !validMirror(m) || !validVersion.MatchString(v) {
 		fail(c, 400, "版本或镜像地址无效")
 		return
@@ -339,7 +333,6 @@ func (a *App) devices(c *gin.Context) {
 		return
 	}
 	out := []gin.H{}
-	total := 0
 	for _, p := range data.Profiles {
 		title := p.ID
 		if len(p.Titles) > 0 {
@@ -349,15 +342,9 @@ func (a *App) devices(c *gin.Context) {
 				title = t.Title
 			}
 		}
-		if q != "" && !strings.Contains(strings.ToLower(title+" "+p.ID+" "+p.Target), q) {
-			continue
-		}
-		total++
-		if total > (page-1)*100 && len(out) < 100 {
-			out = append(out, gin.H{"id": p.ID, "target": p.Target, "title": title})
-		}
+		out = append(out, gin.H{"id": p.ID, "target": p.Target, "title": title})
 	}
-	c.JSON(200, gin.H{"items": out, "total": total, "page": page, "page_size": 100})
+	c.JSON(200, gin.H{"items": out})
 }
 func (a *App) profile(c *gin.Context) {
 	m := mirror(c)
@@ -658,8 +645,8 @@ func firmwareFiles(b Build) (map[string][]byte, error) {
 		"wrtkit/files/etc/uci-defaults/09-wrtkit-mirror": []byte(ecosystemMirrorScript(b.Ecosystem, b.Mirror)),
 		"wrtkit/files/etc/uci-defaults/10-wrtkit":        []byte(script),
 	}
-	if b.Theme != "" {
-		files["wrtkit/files/etc/uci-defaults/95-wrtkit-theme"] = []byte(themeScript(b.Theme))
+	if script := themeScript(b.Theme); script != "" {
+		files["wrtkit/files/etc/uci-defaults/95-wrtkit-theme"] = []byte(script)
 	}
 	if b.Script != "" {
 		files["wrtkit/files/etc/uci-defaults/99-custom.sh"] = []byte(strings.ReplaceAll(b.Script, "\r\n", "\n"))

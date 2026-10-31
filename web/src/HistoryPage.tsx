@@ -2,7 +2,6 @@ import {
   Button,
   Card,
   Empty,
-  Flex,
   Space,
   Table,
   Tag,
@@ -12,7 +11,7 @@ import {
 import { DeleteOutlined, EyeOutlined } from "@ant-design/icons";
 import type { ReactNode } from "react";
 import type { Job } from "./types";
-const { Title, Text } = Typography;
+const { Text } = Typography;
 type Props = {
   jobs: Job[];
   refresh: ReactNode;
@@ -29,14 +28,7 @@ export function HistoryPage({
 }: Props) {
   return (
     <>
-      <Flex justify="space-between" className="page-title">
-        <div>
-          <Title level={3}>构建记录</Title>
-          <Text type="secondary">查看构建状态和固件产物。</Text>
-        </div>
-        {refresh}
-      </Flex>
-      <Card>
+      <Card title="构建任务" extra={refresh}>
         <Table<Job>
           rowKey="id"
           dataSource={jobs}

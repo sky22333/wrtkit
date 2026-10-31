@@ -105,13 +105,14 @@ function Workspace() {
   const [deviceVersion, setDeviceVersion] = useState("");
   const [query, setQuery] = useState("");
   const [devices, setDevices] = useState<Device[]>([]);
-  const [total, setTotal] = useState(0);
   const [devicePage, setDevicePage] = useState(1);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loadingDevices, setLoadingDevices] = useState(false);
   const [packageData, setPackageData] = useState<Package[]>([]);
   const [packageWarnings, setPackageWarnings] = useState<string[]>([]);
   const [loadingPackages, setLoadingPackages] = useState(false);
+  const [packageError, setPackageError] = useState("");
+  const [packageRetry, setPackageRetry] = useState(0);
   const [packageSearch, setPackageSearch] = useState("");
   const initializedDevice = useRef(false);
   const [packageFeed, setPackageFeed] = useState("all");
@@ -193,35 +194,36 @@ function Workspace() {
     return () => controller.abort();
   }, [draft.mirror, error]);
   useEffect(() => {
-    if (!deviceVersion) return;
+    if (!deviceVersion || !draft.mirror) return;
     const controller = new AbortController();
     const timer = setTimeout(() => {
       setLoadingDevices(true);
       const p = new URLSearchParams({
         version: deviceVersion,
         mirror: draft.mirror,
-        q: query,
-        page: String(devicePage),
       });
-      api<{ items: Device[]; total: number }>("/devices?" + p, {
-        signal: controller.signal,
-      })
-        .then((x) => {
-          setDevices(x.items);
-          setTotal(x.total);
-        })
+      api<{ items: Device[] }>("/devices?" + p, { signal: controller.signal })
+        .then((x) => setDevices(x.items))
         .catch((e) => {
           if (!controller.signal.aborted) error(e);
         })
         .finally(() => {
           if (!controller.signal.aborted) setLoadingDevices(false);
         });
-    }, 250);
+    }, 0);
     return () => {
       clearTimeout(timer);
       controller.abort();
     };
-  }, [query, deviceVersion, devicePage, draft.mirror, error]);
+  }, [deviceVersion, draft.mirror, error]);
+  const filteredDevices = useMemo(() => {
+    const search = query.trim().toLowerCase();
+    return search
+      ? devices.filter((d) =>
+          `${d.title} ${d.id} ${d.target}`.toLowerCase().includes(search),
+        )
+      : devices;
+  }, [devices, query]);
   useEffect(() => {
     if (!draft.version || !draft.profile) return;
     const controller = new AbortController();
@@ -242,7 +244,7 @@ function Workspace() {
     return () => controller.abort();
   }, [draft.version, draft.target, draft.profile, draft.mirror, error]);
   useEffect(() => {
-    if (step !== 1 || !draft.profile) return;
+    if (step !== 1 || !draft.profile || initializedDevice.current) return;
     const controller = new AbortController();
     const p = new URLSearchParams({
       version: draft.version,
@@ -273,7 +275,9 @@ function Workspace() {
       .catch((e) => {
         if (!controller.signal.aborted) {
           setPackageData([]);
-          error(e);
+          setPackageError(
+            e instanceof Error ? e.message : "软件包目录加载失败",
+          );
         }
       })
       .finally(() => {
@@ -287,7 +291,7 @@ function Workspace() {
     draft.profile,
     draft.mirror,
     ecosystem,
-    error,
+    packageRetry,
   ]);
   useEffect(() => {
     if (page === "history") api<Job[]>("/jobs").then(setJobs).catch(error);
@@ -295,7 +299,13 @@ function Workspace() {
   const jobId = job?.id;
   const jobStatus = job?.status;
   useEffect(() => {
-    if (!jobId || !jobStatus || !["queued", "running"].includes(jobStatus))
+    if (
+      page !== "build" ||
+      step !== 4 ||
+      !jobId ||
+      !jobStatus ||
+      !["queued", "running"].includes(jobStatus)
+    )
       return;
     const id = jobId;
     const controller = new AbortController();
@@ -325,9 +335,15 @@ function Workspace() {
       controller.abort();
       if (timer) clearTimeout(timer);
     };
-  }, [jobId, jobStatus, error]);
+  }, [jobId, jobStatus, page, step, error]);
   useEffect(() => {
-    if (!jobId || !jobStatus || ["queued", "running"].includes(jobStatus))
+    if (
+      page !== "build" ||
+      step !== 4 ||
+      !jobId ||
+      !jobStatus ||
+      ["queued", "running"].includes(jobStatus)
+    )
       return;
     const controller = new AbortController();
     fetch("/api/jobs/" + jobId + "/log", { signal: controller.signal })
@@ -340,7 +356,7 @@ function Workspace() {
         if (!controller.signal.aborted) error(e);
       });
     return () => controller.abort();
-  }, [jobId, jobStatus, error]);
+  }, [jobId, jobStatus, page, step, error]);
   useEffect(() => {
     if (!jobId || jobStatus !== "success") return;
     const controller = new AbortController();
@@ -429,6 +445,12 @@ function Workspace() {
     [packageData, packageFeed, packageSearch],
   );
   const choose = (d: Device) => {
+    if (
+      draft.version === deviceVersion &&
+      draft.target === d.target &&
+      draft.profile === d.id
+    )
+      return;
     initializedDevice.current = false;
     setProfile(null);
     setPackageData([]);
@@ -487,9 +509,15 @@ function Workspace() {
       };
     });
   const nextStep = () => {
-    if (step === 0) setLoadingPackages(true);
-    if (step === 1 && loadingPackages) {
-      void message.warning("软件包目录仍在加载");
+    if (step === 0) {
+      setPackageError("");
+      setLoadingPackages(!initializedDevice.current);
+    }
+    if (
+      step === 1 &&
+      (loadingPackages || packageError || packageData.length === 0)
+    ) {
+      void message.warning("请先加载软件包目录");
       return;
     }
     if (
@@ -604,7 +632,6 @@ function Workspace() {
         setDeviceVersion("");
         setVersions([]);
         setDevices([]);
-        setTotal(0);
         setDevicePage(1);
       }
       void message.success("软件源已保存");
@@ -652,7 +679,6 @@ function Workspace() {
       setDeviceVersion("");
       setVersions([]);
       setDevices([]);
-      setTotal(0);
       setDevicePage(1);
       setStep(0);
       setJob(null);
@@ -744,6 +770,7 @@ function Workspace() {
     <Tooltip title="刷新">
       <Button
         aria-label="刷新"
+        type="text"
         icon={<ReloadOutlined />}
         onClick={page === "history" ? loadJobs : environment}
       />
@@ -776,29 +803,9 @@ function Workspace() {
         <Content className="app-content">
           {page === "build" && (
             <>
-              <Flex
-                justify="space-between"
-                align="start"
-                className="page-title"
-              >
-                <div>
-                  <Title level={3}>固件构建</Title>
-                  <Text type="secondary">
-                    选择设备与软件，配置并构建{" "}
-                    {ecosystem === "openwrt" ? "OpenWrt" : "ImmortalWrt"} 固件。
-                  </Text>
-                </div>
-                <Button
-                  icon={<HistoryOutlined />}
-                  onClick={() => setPage("history")}
-                >
-                  构建记录
-                </Button>
-              </Flex>
               <Card className="build-workspace">
                 {step < 4 && (
                   <Steps
-                    size="small"
                     className="build-steps"
                     current={Math.min(step, 3)}
                     items={[
@@ -821,14 +828,12 @@ function Workspace() {
                       setProfile={setProfile}
                       setVersions={setVersions}
                       setDevices={setDevices}
-                      setTotal={setTotal}
                       setDevicePage={setDevicePage}
                       query={query}
                       setQuery={setQuery}
                       devicePage={devicePage}
                       loadingDevices={loadingDevices}
-                      devices={devices}
-                      total={total}
+                      devices={filteredDevices}
                       choose={choose}
                     />
                   )}
@@ -848,6 +853,12 @@ function Workspace() {
                       packageSearch={packageSearch}
                       setPackageSearch={setPackageSearch}
                       loadingPackages={loadingPackages}
+                      packageError={packageError}
+                      retryPackages={() => {
+                        setPackageError("");
+                        setLoadingPackages(true);
+                        setPackageRetry((n) => n + 1);
+                      }}
                       categorizedPackages={categorizedPackages}
                       additionalCount={additionalCount}
                     />
@@ -991,7 +1002,10 @@ function Workspace() {
                         type="primary"
                         disabled={
                           (step === 0 && (!draft.profile || !profile)) ||
-                          (step === 1 && loadingPackages)
+                          (step === 1 &&
+                            (loadingPackages ||
+                              !!packageError ||
+                              packageData.length === 0))
                         }
                         onClick={nextStep}
                       >
@@ -1088,7 +1102,16 @@ function Workspace() {
 }
 export default function App() {
   return (
-    <ConfigProvider locale={zhCN}>
+    <ConfigProvider
+      locale={zhCN}
+      theme={{
+        token: { fontSize: 16, controlHeight: 36 },
+        components: {
+          Form: { itemMarginBottom: 18 },
+          Table: { cellPaddingBlock: 10, cellPaddingBlockMD: 8 },
+        },
+      }}
+    >
       <AntApp>
         <Workspace />
       </AntApp>

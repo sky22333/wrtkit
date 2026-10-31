@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { Alert, App, Button, Card, Flex, Space, Tag, Typography } from "antd";
+import { Alert, App, Button, Card, Space, Tag, Typography } from "antd";
 import { api } from "./api";
 import type { Environment } from "./types";
 
-const { Title, Text, Paragraph } = Typography;
+const { Paragraph } = Typography;
 type Props = {
   env: Environment | null;
   checkingEnv: boolean;
@@ -22,25 +22,21 @@ export function EnvironmentPage({
   const [installing, setInstalling] = useState(false);
   return (
     <>
-      <Flex justify="space-between" className="page-title">
-        <div>
-          <Title level={3}>构建环境</Title>
-          <Text type="secondary">检查本机容器环境。</Text>
-        </div>
-        {refresh}
-      </Flex>
       <Card
         title={env?.name || "容器环境"}
         extra={
-          <Tag color={env?.available ? "success" : "default"}>
-            {checkingEnv
-              ? "检查中"
-              : !env
-                ? "未检查"
-                : env.available
-                  ? "基本可访问"
-                  : "需要处理"}
-          </Tag>
+          <Space>
+            <Tag color={env?.available ? "success" : "default"}>
+              {checkingEnv
+                ? "检查中"
+                : !env
+                  ? "未检查"
+                  : env.available
+                    ? "可访问"
+                    : "需要处理"}
+            </Tag>
+            {refresh}
+          </Space>
         }
       >
         <Space orientation="vertical" className="full" size="middle">

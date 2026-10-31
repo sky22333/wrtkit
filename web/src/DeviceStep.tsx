@@ -13,14 +13,12 @@ type Props = {
   setProfile: Setter<Profile | null>;
   setVersions: Setter<string[]>;
   setDevices: Setter<Device[]>;
-  setTotal: Setter<number>;
   setDevicePage: Setter<number>;
   query: string;
   setQuery: Setter<string>;
   devicePage: number;
   loadingDevices: boolean;
   devices: Device[];
-  total: number;
   choose: (device: Device) => void;
 };
 export function DeviceStep({
@@ -33,14 +31,12 @@ export function DeviceStep({
   setProfile,
   setVersions,
   setDevices,
-  setTotal,
   setDevicePage,
   query,
   setQuery,
   devicePage,
   loadingDevices,
   devices,
-  total,
   choose,
 }: Props) {
   if (!draft.mirror) {
@@ -74,7 +70,6 @@ export function DeviceStep({
             setDeviceVersion("");
             setVersions([]);
             setDevices([]);
-            setTotal(0);
             setDevicePage(1);
           }}
         />
@@ -88,6 +83,7 @@ export function DeviceStep({
           }))}
           className="version-select"
           onChange={(v) => {
+            setDevices([]);
             setDeviceVersion(v);
             patch({
               version: "",
@@ -114,14 +110,13 @@ export function DeviceStep({
         <Skeleton active title={false} paragraph={{ rows: 7 }} />
       ) : (
         <Table<Device>
-          size="small"
+          size="middle"
           rowKey={(d) => d.target + "/" + d.id}
           loading={loadingDevices}
           dataSource={devices}
           pagination={{
             current: devicePage,
             pageSize: 100,
-            total,
             showSizeChanger: false,
             onChange: setDevicePage,
           }}
@@ -156,7 +151,7 @@ export function DeviceStep({
           ]}
         />
       )}
-      <Text type="secondary">共 {total} 个设备。</Text>
+      <Text type="secondary">共 {devices.length} 个设备。</Text>
     </Space>
   );
 }

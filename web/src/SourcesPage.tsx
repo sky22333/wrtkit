@@ -2,7 +2,7 @@ import { Button, Card, Form, Input, Tooltip, Typography } from "antd";
 import type { FormInstance } from "antd";
 import { DeleteOutlined, PlusOutlined } from "@ant-design/icons";
 import type { MirrorSource } from "./types";
-const { Title, Text } = Typography;
+const { Text } = Typography;
 type Props = {
   mirrorForm: FormInstance<{ mirrors: MirrorSource[] }>;
   saveMirrors: (values: { mirrors: MirrorSource[] }) => void;
@@ -11,10 +11,6 @@ type Props = {
 export function SourcesPage({ mirrorForm, saveMirrors, savingMirrors }: Props) {
   return (
     <>
-      <div className="page-title">
-        <Title level={3}>软件源站</Title>
-        <Text type="secondary">管理设备目录、构建和固件默认软件源。</Text>
-      </div>
       <Card
         title="软件源列表"
         extra={<Text type="secondary">第一项为默认源</Text>}

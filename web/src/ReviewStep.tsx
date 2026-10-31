@@ -20,7 +20,7 @@ export function ReviewStep({
       <Title level={4}>确认构建</Title>
       <Descriptions
         bordered
-        size="small"
+        size="middle"
         column={1}
         items={[
           {

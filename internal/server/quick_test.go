@@ -91,6 +91,19 @@ func TestThemeScriptUsesExistingAssets(t *testing.T) {
 			t.Fatal(script)
 		}
 	}
+	for name, path := range map[string]string{"luci-theme-openwrt": "/luci-static/openwrt.org", "luci-theme-openwrt-2020": "/luci-static/openwrt2020", "luci-theme-bootstrap": "/luci-static/bootstrap"} {
+		if script := themeScript(name); !strings.Contains(script, path) {
+			t.Fatalf("%s: %s", name, script)
+		}
+	}
+	files, err := firmwareFiles(Build{Version: "25.12.2", Theme: "luci-theme-unknown"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := files["wrtkit/files/etc/uci-defaults/95-wrtkit-theme"]; ok {
+		t.Fatal("unknown theme must not receive an invented path")
+	}
+
 	if validateQuick(Build{Theme: "luci-theme-foo;reboot"}) == nil {
 		t.Fatal("invalid theme accepted")
 	}

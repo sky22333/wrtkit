@@ -68,7 +68,7 @@ func TestAPIWithMirror(t *testing.T) {
 	if strings.Contains(strings.Join(payload.Versions, ","), "22.03") || !strings.Contains(strings.Join(payload.Versions, ","), "25.12.2") {
 		t.Fatal(payload)
 	}
-	req = httptest.NewRequest("GET", "/api/devices?version=25.12.2&mirror="+upstream.URL+"&q=acme", nil)
+	req = httptest.NewRequest("GET", "/api/devices?version=25.12.2&mirror="+upstream.URL, nil)
 	rec = httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 	if rec.Code != 200 || !strings.Contains(rec.Body.String(), "generic") {
@@ -152,7 +152,7 @@ func TestPreflightPinsImage(t *testing.T) {
 		t.Fatal("unknown profile accepted")
 	}
 }
-func TestDevicesPagination(t *testing.T) {
+func TestDevicesList(t *testing.T) {
 	profiles := make([]map[string]any, 205)
 	for i := range profiles {
 		profiles[i] = map[string]any{"id": fmt.Sprintf("device-%03d", i), "target": "x86/64"}
@@ -167,11 +167,10 @@ func TestDevicesPagination(t *testing.T) {
 	}
 	defer a.Close()
 	a.client = upstream.Client()
-	req := httptest.NewRequest("GET", "/api/devices?version=25.12.2&page=3&mirror="+upstream.URL, nil)
+	req := httptest.NewRequest("GET", "/api/devices?version=25.12.2&mirror="+upstream.URL, nil)
 	rec := httptest.NewRecorder()
 	a.Router().ServeHTTP(rec, req)
 	var result struct {
-		Total int `json:"total"`
 		Items []struct {
 			ID string `json:"id"`
 		} `json:"items"`
@@ -179,7 +178,7 @@ func TestDevicesPagination(t *testing.T) {
 	if err = json.Unmarshal(rec.Body.Bytes(), &result); err != nil {
 		t.Fatal(err)
 	}
-	if rec.Code != 200 || result.Total != 205 || len(result.Items) != 5 || result.Items[0].ID != "device-200" {
+	if rec.Code != 200 || len(result.Items) != 205 || result.Items[200].ID != "device-200" {
 		t.Fatalf("status=%d result=%+v", rec.Code, result)
 	}
 }

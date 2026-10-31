@@ -23,7 +23,7 @@ body {
   display: flex;
   align-items: center;
   gap: 10px;
-  font-size: 17px;
+  font-size: 18px;
 }
 .app-content {
   width: 100%;
@@ -31,10 +31,6 @@ body {
   padding: 32px;
   margin: 0 auto;
 }
-.page-title {
-  margin-bottom: 24px;
-}
-.page-title .ant-typography,
 .step-content h4.ant-typography {
   margin-top: 0;
   margin-bottom: 6px;
@@ -75,8 +71,8 @@ body {
   width: 100%;
 }
 .mirror-select {
-  min-width: 280px;
-  flex: 1;
+  flex: 0 1 220px;
+  min-width: 0;
 }
 .version-select {
   min-width: 160px;
@@ -94,8 +90,9 @@ body {
   max-height: 360px;
   overflow: auto;
   white-space: pre-wrap;
-  word-break: break-all;
-  font-size: 12px;
+  word-break: break-word;
+  font-size: 13px;
+  line-height: 1.7;
 }
 @media (max-width: 768px) {
   .app-content {
@@ -143,13 +140,8 @@ body {
   width: 30px;
   height: 30px;
 }
-.page-title,
 .step-footer {
   gap: 16px;
-}
-.log {
-  word-break: break-word;
-  line-height: 1.7;
 }
 .artifact-list .ant-list-header {
   padding: 12px 16px;
@@ -177,7 +169,7 @@ body {
 .mirror-list-header,
 .mirror-row {
   display: grid;
-  grid-template-columns: minmax(130px, 1fr) minmax(240px, 2.5fr) 32px;
+  grid-template-columns: minmax(130px, 1fr) minmax(240px, 2.5fr) 36px;
   align-items: start;
   gap: 12px;
 }
@@ -196,7 +188,7 @@ body {
     display: none;
   }
   .mirror-row {
-    grid-template-columns: minmax(0, 1fr) 32px;
+    grid-template-columns: minmax(0, 1fr) 36px;
     gap: 8px;
     margin-bottom: 12px;
   }

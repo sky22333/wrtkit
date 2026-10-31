@@ -36,6 +36,8 @@ type Props = {
   packageSearch: string;
   setPackageSearch: Dispatch<SetStateAction<string>>;
   loadingPackages: boolean;
+  packageError: string;
+  retryPackages: () => void;
   categorizedPackages: Package[];
   additionalCount: number;
 };
@@ -54,6 +56,8 @@ export function PackagesStep({
   packageSearch,
   setPackageSearch,
   loadingPackages,
+  packageError,
+  retryPackages,
   categorizedPackages,
   additionalCount,
 }: Props) {
@@ -63,6 +67,16 @@ export function PackagesStep({
         <Skeleton active paragraph={{ rows: 2 }} />
         <Skeleton active paragraph={{ rows: 8 }} />
       </Space>
+    );
+  if (packageError)
+    return (
+      <Alert
+        type="error"
+        showIcon
+        title="软件包目录加载失败"
+        description={packageError}
+        action={<Button onClick={retryPackages}>重试</Button>}
+      />
     );
   return (
     <Space orientation="vertical" size="middle" className="full">
@@ -175,7 +189,7 @@ export function PackagesStep({
             allowClear
           />
           <Table<Package>
-            size="small"
+            size="middle"
             loading={loadingPackages}
             rowKey={(p) => p.feed + "/" + p.name}
             dataSource={categorizedPackages}
