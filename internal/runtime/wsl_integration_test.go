@@ -68,11 +68,7 @@ func TestWSLCManagedContainerCleanup(t *testing.T) {
 		t.Fatalf("create: %v %s", err, out)
 	}
 	e := &WSL{}
-	present, err := e.ImagePresent(ctx, img)
-	if err != nil || !present {
-		t.Fatalf("image present=%v error=%v", present, err)
-	}
-	if err = e.RemoveJobContainer(ctx, id); err != nil {
+	if err := e.RemoveJobContainer(ctx, id); err != nil {
 		t.Fatal(err)
 	}
 	out, err := exec.CommandContext(ctx, binary, "container", "list", "--all", "--format", "json").Output()

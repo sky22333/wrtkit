@@ -25,13 +25,14 @@ func TestProxySettingsAndHTTPRequests(t *testing.T) {
 		fmt.Fprint(w, `{"ok":true}`)
 	}))
 	defer proxy.Close()
+	router := testRouter(t, app)
 	put := func(value string, status int) {
 		t.Helper()
 		data, _ := json.Marshal(map[string]string{"proxy": value})
 		req := httptest.NewRequest("PUT", "/api/settings/proxy", bytes.NewReader(data))
 		req.Header.Set("Content-Type", "application/json")
 		out := httptest.NewRecorder()
-		app.Router().ServeHTTP(out, req)
+		router.ServeHTTP(out, req)
 		if out.Code != status {
 			t.Fatalf("proxy %q: %d %s", value, out.Code, out.Body.String())
 		}

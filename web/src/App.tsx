@@ -1,3 +1,4 @@
+import { LoginPage } from "./LoginPage";
 import { initialBuild } from "./defaults";
 import { ReviewStep } from "./ReviewStep";
 import { PackagesStep } from "./PackagesStep";
@@ -48,9 +49,11 @@ import {
   FileOutlined,
   FileTextOutlined,
   FolderOpenOutlined,
+  GithubOutlined,
   HistoryOutlined,
   HddOutlined,
   LoadingOutlined,
+  LogoutOutlined,
   ReloadOutlined,
   SettingOutlined,
   StopOutlined,
@@ -85,7 +88,7 @@ const nav = [
   { key: "settings", icon: <SettingOutlined />, label: "系统设置" },
 ];
 
-function Workspace() {
+function Workspace({ onLogout }: { onLogout: () => void }) {
   const { message, modal } = AntApp.useApp();
   const [starting, setStarting] = useState(false);
   const [page, setPage] = useState("build");
@@ -704,12 +707,6 @@ function Workspace() {
   const cleanup = async (j: Job) => {
     try {
       const info = await api<Cleanup>("/jobs/" + j.id + "/cleanup");
-      const labels: Record<string, string> = {
-        remove: "清理此任务关联的 WrtKit 镜像",
-        shared: "镜像仍被其他构建记录使用，将保留",
-        preexisting: "镜像已存在或归属无法确认，将保留",
-        unknown: "旧记录无镜像归属信息，将保留",
-      };
       modal.confirm({
         title: "清理构建产物？",
         okText: "清理",
@@ -722,27 +719,18 @@ function Workspace() {
               产物并检查构建容器；构建记录和日志保留。
             </Text>
             <Text type="secondary">{info.path}</Text>
-            <Text>{labels[info.image_action] || "镜像将保留"}</Text>
+            <Text>
+              将删除该任务使用的镜像引用，包括此前已存在或其他任务使用的镜像。
+            </Text>
             {info.image && <Text type="secondary">{info.image}</Text>}
           </Space>
         ),
         onOk: async () => {
           try {
-            const result = await api<{ image_result: string }>(
-              "/jobs/" + j.id,
-              {
-                method: "DELETE",
-                body: JSON.stringify({ remove_image: true }),
-              },
-            );
-            const outcome: Record<string, string> = {
-              removed: "产物和 ImageBuilder 镜像已清理",
-              absent: "产物已清理，镜像已不存在",
-              shared: "产物已清理；镜像被其他构建记录使用，已保留",
-              preexisting: "产物已清理；原有或归属不明的镜像已保留",
-              unknown: "产物已清理；旧记录的镜像已保留",
-            };
-            void message.success(outcome[result.image_result] || "产物已清理");
+            await api("/jobs/" + j.id, {
+              method: "DELETE",
+            });
+            void message.success("产物、构建容器及关联镜像已清理");
             await loadJobs();
             if (job?.id === j.id) {
               setJob(null);
@@ -798,6 +786,30 @@ function Workspace() {
             if (key === "environment") void environment();
           }}
         />
+        <div className="sidebar-actions">
+          <Tooltip title="退出登录">
+            <Button
+              type="text"
+              icon={<LogoutOutlined />}
+              aria-label="退出登录"
+              onClick={() => {
+                void api("/auth/logout", { method: "POST" })
+                  .then(onLogout)
+                  .catch(error);
+              }}
+            />
+          </Tooltip>
+          <Tooltip title="GitHub">
+            <Button
+              type="text"
+              icon={<GithubOutlined />}
+              aria-label="GitHub"
+              href="https://github.com/sky22333/wrtkit"
+              target="_blank"
+              rel="noopener noreferrer"
+            />
+          </Tooltip>
+        </div>
       </Sider>
       <Layout>
         <Content className="app-content">
@@ -1100,6 +1112,43 @@ function Workspace() {
     </Layout>
   );
 }
+function Authentication() {
+  const [status, setStatus] = useState<{
+    initialized: boolean;
+    authenticated: boolean;
+  } | null>(null);
+  const [error, setError] = useState("");
+  const refresh = useCallback(() => {
+    api<{ initialized: boolean; authenticated: boolean }>("/auth/status")
+      .then(setStatus)
+      .catch((e: unknown) =>
+        setError(e instanceof Error ? e.message : "连接失败"),
+      );
+  }, []);
+  useEffect(() => {
+    refresh();
+    const expired = () => refresh();
+    window.addEventListener("wrtkit-unauthorized", expired);
+    return () => window.removeEventListener("wrtkit-unauthorized", expired);
+  }, [refresh]);
+  if (error)
+    return (
+      <div className="login-page">
+        <Alert type="error" title={error} showIcon />
+      </div>
+    );
+  if (!status)
+    return (
+      <div className="login-page">
+        <LoadingOutlined />
+      </div>
+    );
+  return status.authenticated ? (
+    <Workspace onLogout={refresh} />
+  ) : (
+    <LoginPage initialized={status.initialized} onLogin={refresh} />
+  );
+}
 export default function App() {
   return (
     <ConfigProvider
@@ -1113,7 +1162,7 @@ export default function App() {
       }}
     >
       <AntApp>
-        <Workspace />
+        <Authentication />
       </AntApp>
     </ConfigProvider>
   );

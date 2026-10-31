@@ -23,11 +23,9 @@ type Spec struct {
 	RootFSSize                                 int
 	JobID                                      string
 	Files                                      map[string][]byte
-	OnPulled                                   func() error
 }
 type Engine interface {
 	Check(context.Context) error
-	ImagePresent(context.Context, string) (bool, error)
 	RemoveImage(context.Context, string) error
 	RemoveJobContainer(context.Context, string) error
 	Run(context.Context, Spec, io.Writer, string) error
@@ -162,11 +160,6 @@ func (d *Docker) Run(ctx context.Context, s Spec, logs io.Writer, out string) er
 	r.Body.Close()
 	if e != nil {
 		return e
-	}
-	if s.OnPulled != nil {
-		if err := s.OnPulled(); err != nil {
-			return err
-		}
 	}
 	payload := map[string]any{"Labels": map[string]string{"io.wrtkit.job": s.JobID}, "Image": s.Image, "Cmd": []string{"sh", "/tmp/wrtkit/run.sh"}, "Env": []string{fmt.Sprintf("WRT_ROOTFS_SIZE=%d", s.RootFSSize), "WRT_REVISION=" + s.Revision, "WRT_PROFILE=" + s.Profile, "WRT_PACKAGES=" + s.Packages, "WRT_MIRROR=" + s.Mirror}, "HostConfig": map[string]any{"CapDrop": []string{"ALL"}, "SecurityOpt": []string{"no-new-privileges"}}}
 	b, _ := json.Marshal(payload)
@@ -341,11 +334,6 @@ func (*WSL) Run(ctx context.Context, s Spec, logs io.Writer, out string) error {
 	}
 	if e := run("pull", s.Image); e != nil {
 		return e
-	}
-	if s.OnPulled != nil {
-		if err := s.OnPulled(); err != nil {
-			return err
-		}
 	}
 	name := fmt.Sprintf("wrtkit-%d", time.Now().UnixNano())
 	if s.JobID != "" {

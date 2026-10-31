@@ -13,7 +13,7 @@ func TestEcosystemSettingsAreSeparate(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer a.Close()
-	router := a.Router()
+	router := testRouter(t, a)
 	call := func(method, path, body string) *httptest.ResponseRecorder {
 		t.Helper()
 		req := httptest.NewRequest(method, path, strings.NewReader(body))
