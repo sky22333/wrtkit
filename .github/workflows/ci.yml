@@ -1,26 +1,151 @@
-name: 验证
-on: [push, pull_request]
+name: 构建与发布
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 发布版本号，例如 v1.0.0
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
 jobs:
-  check:
+  checks-and-frontend:
+    name: 质量检查与前端构建
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: 拉取代码
+        uses: actions/checkout@v7
+
+      - name: 设置 Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: 设置 Node.js
+        uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
           cache-dependency-path: web/package-lock.json
-      - uses: actions/setup-go@v5
+
+      - name: 检查发布版本号
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          if [[ ! "$RELEASE_VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "版本号格式应为 v1.0.0 或 v1.0.0-rc.1" >&2
+            exit 1
+          fi
+
+      - name: 前端测试与构建
+        working-directory: web
+        run: |
+          npm ci
+          npm test
+          npm run lint
+          npm run build
+
+      - name: Go 测试与静态检查
+        run: |
+          go test ./...
+          go vet ./...
+
+      - name: 暂存前端构建产物
+        uses: actions/upload-artifact@v7
+        with:
+          name: frontend-dist
+          path: internal/web/dist
+          if-no-files-found: error
+          retention-days: 1
+
+  build:
+    name: 构建 ${{ matrix.name }}
+    needs: checks-and-frontend
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: windows-amd64
+            goos: windows
+            goarch: amd64
+            ext: .exe
+          - name: windows-arm64
+            goos: windows
+            goarch: arm64
+            ext: .exe
+          - name: linux-amd64
+            goos: linux
+            goarch: amd64
+            ext: ''
+          - name: linux-arm64
+            goos: linux
+            goarch: arm64
+            ext: ''
+    steps:
+      - name: 拉取代码
+        uses: actions/checkout@v7
+
+      - name: 设置 Go
+        uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
-      - run: npm ci
-        working-directory: web
-      - run: npm run test
-        working-directory: web
-      - run: npm run lint
-        working-directory: web
-      - run: npm run build
-        working-directory: web
-      - run: go test ./...
-      - run: go vet ./...
-      - run: go build -o wrtkit ./cmd/wrtkit
+
+      - name: 下载前端构建产物
+        uses: actions/download-artifact@v8
+        with:
+          name: frontend-dist
+          path: internal/web/dist
+
+      - name: 编译与打包
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: '0'
+          TARGET_NAME: ${{ matrix.name }}
+          BIN_EXT: ${{ matrix.ext }}
+        run: |
+          mkdir -p release/package release/out
+          go build -trimpath -ldflags='-s -w' -o "release/package/wrtkit${BIN_EXT}" ./cmd/wrtkit
+          cp README.md release/package/
+          if [ "$GOOS" = windows ]; then
+            (cd release/package && zip -9 -r "../out/wrtkit-${TARGET_NAME}.zip" .)
+          else
+            (cd release/package && tar -czf "../out/wrtkit-${TARGET_NAME}.tar.gz" .)
+          fi
+
+      - name: 上传构建产物
+        uses: actions/upload-artifact@v7
+        with:
+          name: wrtkit-${{ matrix.name }}
+          path: release/out/*
+          if-no-files-found: error
+          retention-days: 1
+
+  release:
+    name: 创建 GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: 下载所有构建产物
+        uses: actions/download-artifact@v8
+        with:
+          path: artifacts
+          merge-multiple: true
+          pattern: wrtkit-*
+
+      - name: 创建发布
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ inputs.version }}
+          target_commitish: ${{ github.sha }}
+          name: WrtKit ${{ inputs.version }}
+          generate_release_notes: true
+          prerelease: ${{ contains(inputs.version, '-') }}
+          files: artifacts/*
+          fail_on_unmatched_files: true
