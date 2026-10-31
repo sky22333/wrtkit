@@ -3,9 +3,12 @@ module wrtkit
 go 1.26.2
 
 require (
+	github.com/alexedwards/argon2id v1.0.0
+	github.com/alexedwards/scs/v2 v2.9.0
 	github.com/gin-gonic/gin v1.12.0
 	github.com/sergeymakinen/go-crypt v1.0.6
 	golang.org/x/sys v0.49.0
+	golang.org/x/time v0.16.0
 	modernc.org/sqlite v1.61.0
 )
 

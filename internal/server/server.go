@@ -22,7 +22,9 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/alexedwards/scs/v2"
 	"github.com/gin-gonic/gin"
+	"golang.org/x/time/rate"
 	_ "modernc.org/sqlite"
 	"wrtkit/internal/runtime"
 	"wrtkit/internal/web"
@@ -34,18 +36,20 @@ var validPart = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._+,-]*$`)
 var validVersion = regexp.MustCompile(`^(23\.(?:0[5-9]|1[0-2])|(?:2[4-9]|[3-9][0-9])\.(?:0[1-9]|1[0-2]))(\.[0-9]+|-SNAPSHOT)$`)
 
 type App struct {
-	db         *sql.DB
-	dir        string
-	client     *http.Client
-	hubBase    string
-	mu         sync.Mutex
-	wg         sync.WaitGroup
-	closing    bool
-	installing bool
-	active     map[string]context.CancelFunc
-	engine     func() runtime.Engine
-	proxyMu    sync.RWMutex
-	proxyURL   *url.URL
+	db           *sql.DB
+	sessions     *scs.SessionManager
+	loginLimiter *rate.Limiter
+	dir          string
+	client       *http.Client
+	hubBase      string
+	mu           sync.Mutex
+	wg           sync.WaitGroup
+	closing      bool
+	installing   bool
+	active       map[string]context.CancelFunc
+	engine       func() runtime.Engine
+	proxyMu      sync.RWMutex
+	proxyURL     *url.URL
 }
 type Build struct {
 	Ecosystem    string   `json:"ecosystem"`
@@ -98,11 +102,14 @@ func New(dir string) (*App, error) {
 		return nil, e
 	}
 	db.SetMaxOpenConns(1)
-	_, e = db.Exec(`CREATE TABLE IF NOT EXISTS jobs(id TEXT PRIMARY KEY,status TEXT NOT NULL,stage TEXT NOT NULL,error TEXT NOT NULL,created TEXT NOT NULL,request TEXT NOT NULL);CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY,value TEXT NOT NULL);CREATE TABLE IF NOT EXISTS managed_images(ref TEXT PRIMARY KEY, owned INTEGER NOT NULL);CREATE TABLE IF NOT EXISTS job_images(job_id TEXT PRIMARY KEY, ref TEXT NOT NULL);UPDATE jobs SET status='interrupted',stage='程序中断',error='程序退出，任务未完成' WHERE status IN ('running','queued');`)
+	_, e = db.Exec(`CREATE TABLE IF NOT EXISTS jobs(id TEXT PRIMARY KEY,status TEXT NOT NULL,stage TEXT NOT NULL,error TEXT NOT NULL,created TEXT NOT NULL,request TEXT NOT NULL);CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY,value TEXT NOT NULL);CREATE TABLE IF NOT EXISTS admin(id INTEGER PRIMARY KEY CHECK(id=1), username TEXT NOT NULL, password_hash BLOB NOT NULL);CREATE TABLE IF NOT EXISTS job_images(job_id TEXT PRIMARY KEY, ref TEXT NOT NULL);UPDATE jobs SET status='interrupted',stage='程序中断',error='程序退出，任务未完成' WHERE status IN ('running','queued');`)
 	if e != nil {
 		return nil, e
 	}
-	a := &App{db: db, dir: dir, hubBase: "https://hub.docker.com", engine: runtime.Current, active: map[string]context.CancelFunc{}}
+	a := &App{db: db, sessions: scs.New(), loginLimiter: newLoginLimiter(), dir: dir, hubBase: "https://hub.docker.com", engine: runtime.Current, active: map[string]context.CancelFunc{}}
+	a.sessions.Lifetime = 12 * time.Hour
+	a.sessions.Cookie.HttpOnly = true
+	a.sessions.Cookie.SameSite = http.SameSiteStrictMode
 	if err := a.loadProxy(); err != nil {
 		db.Close()
 		return nil, err
@@ -181,7 +188,11 @@ func (a *App) Router() http.Handler {
 		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 2<<20)
 		c.Next()
 	})
-	api := r.Group("/api")
+	auth := r.Group("/api/auth")
+	auth.GET("/status", a.authStatus)
+	auth.POST("/login", a.login)
+	auth.POST("/logout", a.logout)
+	api := r.Group("/api", a.requireAuth())
 	api.GET("/environment", a.environment)
 	api.POST("/environment/install-wsl", func(c *gin.Context) {
 		a.mu.Lock()
@@ -233,7 +244,7 @@ func (a *App) Router() http.Handler {
 		}
 		server.ServeHTTP(c.Writer, c.Request)
 	})
-	return r
+	return a.sessions.LoadAndSave(r)
 }
 func fail(c *gin.Context, code int, e any) { c.JSON(code, gin.H{"error": fmt.Sprint(e)}) }
 func (a *App) environment(c *gin.Context) {
@@ -567,22 +578,6 @@ func (a *App) execute(ctx context.Context, id string, b Build) {
 	image = imageReference(b.Registry, image)
 	fmt.Fprintln(f, "已确认构建镜像:", image)
 	engine := a.engine()
-	present, inspectErr := engine.ImagePresent(ctx, image)
-	// An unavailable inspection never grants ownership of an existing image.
-	ownable := inspectErr == nil && !present
-	if inspectErr != nil {
-		fmt.Fprintln(f, "无法确认镜像归属，清理时将保留镜像:", inspectErr)
-	}
-	result, e := a.db.Exec(`INSERT INTO managed_images(ref,owned) VALUES(?,0) ON CONFLICT(ref) DO NOTHING`, image)
-	if e != nil {
-		a.update(id, "failed", "记录镜像失败", e.Error())
-		return
-	}
-	inserted, e := result.RowsAffected()
-	if e != nil {
-		a.update(id, "failed", "记录镜像失败", e.Error())
-		return
-	}
 	if _, e = a.db.Exec(`INSERT INTO job_images(job_id,ref) VALUES(?,?)`, id, image); e != nil {
 		a.update(id, "failed", "记录镜像失败", e.Error())
 		return
@@ -605,12 +600,6 @@ func (a *App) execute(ctx context.Context, id string, b Build) {
 		return
 	}
 	spec := runtime.Spec{JobID: id, Image: image, Revision: revision, RootFSSize: b.RootFSSize, Profile: b.Profile, Packages: strings.Join(pack, " "), Mirror: b.Mirror, Files: files}
-	if ownable && inserted == 1 {
-		spec.OnPulled = func() error {
-			_, err := a.db.Exec(`UPDATE managed_images SET owned=1 WHERE ref=?`, image)
-			return err
-		}
-	}
 	e = engine.Run(ctx, spec, f, filepath.Join(dir, "output"))
 	if e != nil {
 		status := "failed"

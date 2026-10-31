@@ -132,14 +132,29 @@ func TestDockerCleanupScopesResources(t *testing.T) {
 		req.URL.Host = strings.TrimPrefix(server.URL, "http://")
 		return http.DefaultTransport.RoundTrip(req)
 	})
-	present, err := d.ImagePresent(context.Background(), "mirror.example/immortalwrt/imagebuilder@"+digest)
-	if err != nil || !present {
-		t.Fatal(present, err)
-	}
-	if err = d.RemoveJobContainer(context.Background(), id); err != nil {
+	err := d.RemoveJobContainer(context.Background(), id)
+	if err != nil {
 		t.Fatal(err)
 	}
 	if len(deleted) != 1 || deleted[0] != "/v1.52/containers/owned" {
 		t.Fatal(deleted)
+	}
+}
+func TestRemoveImageMissingIsSuccess(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/version" {
+			_, _ = w.Write([]byte(`{"ApiVersion":"1.52"}`))
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+	d := &Docker{http: server.Client()}
+	d.http.Transport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		req.URL.Host = strings.TrimPrefix(server.URL, "http://")
+		return http.DefaultTransport.RoundTrip(req)
+	})
+	if err := d.RemoveImage(context.Background(), "example/image@sha256:"+strings.Repeat("a", 64)); err != nil {
+		t.Fatal(err)
 	}
 }

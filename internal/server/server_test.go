@@ -52,7 +52,7 @@ func TestAPIWithMirror(t *testing.T) {
 	}
 	defer a.Close()
 	a.client = upstream.Client()
-	router := a.Router()
+	router := testRouter(t, a)
 	req := httptest.NewRequest("GET", "/api/versions?mirror="+upstream.URL, nil)
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
@@ -106,7 +106,7 @@ func TestPackageIndexes(t *testing.T) {
 	a.client = upstream.Client()
 	req := httptest.NewRequest("GET", "/api/packages?version=25.12.2&target=x86%2F64&profile=generic&mirror="+upstream.URL, nil)
 	rec := httptest.NewRecorder()
-	a.Router().ServeHTTP(rec, req)
+	testRouter(t, a).ServeHTTP(rec, req)
 	if rec.Code != 200 {
 		t.Fatal(rec.Code, rec.Body.String())
 	}
@@ -169,7 +169,7 @@ func TestDevicesList(t *testing.T) {
 	a.client = upstream.Client()
 	req := httptest.NewRequest("GET", "/api/devices?version=25.12.2&mirror="+upstream.URL, nil)
 	rec := httptest.NewRecorder()
-	a.Router().ServeHTTP(rec, req)
+	testRouter(t, a).ServeHTTP(rec, req)
 	var result struct {
 		Items []struct {
 			ID string `json:"id"`
@@ -207,7 +207,7 @@ func TestQuickSecretsNotPersisted(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/jobs", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
-	a.Router().ServeHTTP(rec, req)
+	testRouter(t, a).ServeHTTP(rec, req)
 	if rec.Code != 201 {
 		t.Fatal(rec.Code, rec.Body.String())
 	}
@@ -277,7 +277,7 @@ func TestMirrorSourceSettings(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer a.Close()
-	router := a.Router()
+	router := testRouter(t, a)
 	call := func(method, body string) *httptest.ResponseRecorder {
 		r := httptest.NewRequest(method, "/api/settings", strings.NewReader(body))
 		r.Header.Set("Content-Type", "application/json")

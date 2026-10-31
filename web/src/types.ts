@@ -40,7 +40,6 @@ export type Cleanup = {
   path: string;
   bytes: number;
   image: string;
-  image_action: string;
 };
 export type Package = {
   name: string;

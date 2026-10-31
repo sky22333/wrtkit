@@ -15,20 +15,17 @@ import (
 )
 
 type fakeEngine struct {
-	present    bool
 	fail       bool
 	removed    []string
 	containers []string
 }
 
-func (*fakeEngine) Check(context.Context) error                          { return nil }
-func (f *fakeEngine) ImagePresent(context.Context, string) (bool, error) { return f.present, nil }
+func (*fakeEngine) Check(context.Context) error { return nil }
 func (f *fakeEngine) RemoveImage(_ context.Context, s string) error {
 	if f.fail {
 		return errors.New("image in use")
 	}
 	f.removed = append(f.removed, s)
-	f.present = false
 	return nil
 }
 func (f *fakeEngine) RemoveJobContainer(_ context.Context, s string) error {
@@ -36,17 +33,13 @@ func (f *fakeEngine) RemoveJobContainer(_ context.Context, s string) error {
 	return nil
 }
 func (*fakeEngine) Run(context.Context, runtime.Spec, io.Writer, string) error { return nil }
-func addFixtureJob(t *testing.T, a *App, id, ref string, owned bool) {
+func addFixtureJob(t *testing.T, a *App, id, ref string) {
 	t.Helper()
 	_, err := a.db.Exec(`INSERT INTO jobs VALUES(?,?,?,?,?,?)`, id, "success", "完成", "", "2026-01-01", `{}`)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if ref != "" {
-		_, err = a.db.Exec(`INSERT OR IGNORE INTO managed_images(ref,owned) VALUES(?,?)`, ref, owned)
-		if err != nil {
-			t.Fatal(err)
-		}
 		_, err = a.db.Exec(`INSERT INTO job_images VALUES(?,?)`, id, ref)
 		if err != nil {
 			t.Fatal(err)
@@ -60,28 +53,28 @@ func addFixtureJob(t *testing.T, a *App, id, ref string, owned bool) {
 		t.Fatal(err)
 	}
 }
-func TestCleanupKeepsSharedThenRemovesOwnedImage(t *testing.T) {
+func TestCleanupRemovesReferencedImage(t *testing.T) {
 	a, err := New(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer a.Close()
-	f := &fakeEngine{present: true}
+	f := &fakeEngine{}
 	a.engine = func() runtime.Engine { return f }
 	ref := "immortalwrt/imagebuilder@sha256:" + strings.Repeat("a", 64)
 	one := "111111111111111111111111"
 	two := "222222222222222222222222"
-	addFixtureJob(t, a, one, ref, true)
-	addFixtureJob(t, a, two, ref, true)
+	addFixtureJob(t, a, one, ref)
+	addFixtureJob(t, a, two, ref)
 	call := func(id string) *httptest.ResponseRecorder {
-		r := httptest.NewRequest("DELETE", "/api/jobs/"+id, bytes.NewBufferString(`{"remove_image":true}`))
+		r := httptest.NewRequest("DELETE", "/api/jobs/"+id, bytes.NewBufferString(`{}`))
 		r.Header.Set("Content-Type", "application/json")
 		w := httptest.NewRecorder()
-		a.Router().ServeHTTP(w, r)
+		testRouter(t, a).ServeHTTP(w, r)
 		return w
 	}
 	w := call(one)
-	if w.Code != 200 || !strings.Contains(w.Body.String(), `"shared"`) || len(f.removed) != 0 {
+	if w.Code != 200 || len(f.removed) != 1 {
 		t.Fatal(w.Code, w.Body.String(), f)
 	}
 	j, err := a.job(one)
@@ -92,30 +85,37 @@ func TestCleanupKeepsSharedThenRemovesOwnedImage(t *testing.T) {
 		t.Fatal("output retained", err)
 	}
 	w = call(two)
-	if w.Code != 200 || len(f.removed) != 1 || f.removed[0] != ref || len(f.containers) != 2 {
+	if w.Code != 200 || len(f.removed) != 2 || f.removed[0] != ref || len(f.containers) != 2 {
 		t.Fatal(w.Code, w.Body.String(), f)
 	}
 }
-func TestCleanupRetainsArtifactsWhenImageRemovalFails(t *testing.T) {
+func TestCleanupReportsImageFailure(t *testing.T) {
 	a, err := New(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer a.Close()
-	f := &fakeEngine{present: true, fail: true}
+	f := &fakeEngine{fail: true}
 	a.engine = func() runtime.Engine { return f }
 	id := "aaaaaaaaaaaaaaaaaaaaaaaa"
 	ref := "registry.example/immortalwrt/imagebuilder@sha256:" + strings.Repeat("a", 64)
-	addFixtureJob(t, a, id, ref, true)
-	r := httptest.NewRequest("DELETE", "/api/jobs/"+id, strings.NewReader(`{"remove_image":true}`))
+	addFixtureJob(t, a, id, ref)
+	r := httptest.NewRequest("DELETE", "/api/jobs/"+id, strings.NewReader(`{}`))
 	r.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
-	a.Router().ServeHTTP(w, r)
-	if w.Code != 409 {
+	testRouter(t, a).ServeHTTP(w, r)
+	if w.Code != 502 {
 		t.Fatal(w.Code, w.Body.String())
 	}
-	if _, err = os.Stat(filepath.Join(a.dir, "builds", id, "output", "firmware.bin")); err != nil {
-		t.Fatal("artifact lost", err)
+	if _, err = os.Stat(filepath.Join(a.dir, "builds", id, "output", "firmware.bin")); !os.IsNotExist(err) {
+		t.Fatal("artifact not cleaned", err)
+	}
+	f.fail = false
+	r = httptest.NewRequest("DELETE", "/api/jobs/"+id, nil)
+	w = httptest.NewRecorder()
+	testRouter(t, a).ServeHTTP(w, r)
+	if w.Code != 200 || len(f.removed) != 1 {
+		t.Fatal(w.Code, w.Body.String(), f)
 	}
 }
 func TestRegistryPrefix(t *testing.T) {
@@ -141,10 +141,10 @@ func TestArtifactSizesAreBytes(t *testing.T) {
 	}
 	defer a.Close()
 	id := "aaaaaaaaaaaaaaaaaaaaaaaa"
-	addFixtureJob(t, a, id, "", false)
+	addFixtureJob(t, a, id, "")
 	r := httptest.NewRequest("GET", "/api/jobs/"+id+"/files", nil)
 	w := httptest.NewRecorder()
-	a.Router().ServeHTTP(w, r)
+	testRouter(t, a).ServeHTTP(w, r)
 	if w.Code != 200 || !strings.Contains(w.Body.String(), `"size":4`) {
 		t.Fatalf("files: %d %s", w.Code, w.Body.String())
 	}
