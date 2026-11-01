@@ -15,8 +15,8 @@ WrtKit 是一个本地运行的 OpenWrt 和 ImmortalWrt 固件可视化构建工
 从 [Releases](https://github.com/sky22333/wrtkit/releases) 下载适合系统的版本。
 
 1. 准备构建环境：
-   - **Windows**：安装支持 WSL Containers 的 WSL，无需安装 Linux 发行版。
-   - **Linux**：安装并启动 Docker Engine，确保当前用户可以访问 Docker socket。
+   - **Windows**：启用 WSLc，设置里已提供一键开启功能，无需安装 Docker 或 Linux 发行版
+   - **Linux**：需要已经安装 Docker
 2. 运行 WrtKit，在浏览器打开 [http://127.0.0.1:8088](http://127.0.0.1:8088)。
 3. 首次使用时创建管理员账号，然后选择固件生态、设备和软件包，完成配置并开始构建。
 
