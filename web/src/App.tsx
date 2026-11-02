@@ -1,6 +1,46 @@
-import { retryBody, type BuildAttempt } from "./buildRetry";
+import { useCallback, useEffect, useState } from "react";
+import {
+  Alert,
+  Box,
+  Button,
+  Chip,
+  CssBaseline,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  Divider,
+  Drawer,
+  Fade,
+  IconButton,
+  LinearProgress,
+  List,
+  ListItem,
+  ListItemButton,
+  ListItemIcon,
+  ListItemText,
+  Paper,
+  Snackbar,
+  Stack,
+  Step,
+  StepLabel,
+  Stepper,
+  Tooltip,
+  Typography,
+} from "@mui/material";
+import { ThemeProvider } from "@mui/material/styles";
+import treasuryTheme from "./mui-treasury/theme";
+import BuildOutlinedIcon from "@mui/icons-material/BuildOutlined";
+import HistoryOutlinedIcon from "@mui/icons-material/HistoryOutlined";
+import CloudOutlinedIcon from "@mui/icons-material/CloudOutlined";
+import StorageOutlinedIcon from "@mui/icons-material/StorageOutlined";
+import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
+import MenuIcon from "@mui/icons-material/Menu";
+import LogoutOutlinedIcon from "@mui/icons-material/LogoutOutlined";
+import GitHubIcon from "@mui/icons-material/GitHub";
+import RefreshOutlinedIcon from "@mui/icons-material/RefreshOutlined";
+import DownloadOutlinedIcon from "@mui/icons-material/DownloadOutlined";
 import { LoginPage } from "./LoginPage";
-import { initialBuild } from "./defaults";
 import { ReviewStep } from "./ReviewStep";
 import { PackagesStep } from "./PackagesStep";
 import { DeviceStep } from "./DeviceStep";
@@ -8,69 +48,13 @@ import { FirmwareConfigStep } from "./FirmwareConfigStep";
 import { HistoryPage } from "./HistoryPage";
 import { SourcesPage } from "./SourcesPage";
 import { EnvironmentPage } from "./EnvironmentPage";
-import type {
-  Device,
-  Profile,
-  Build,
-  Job,
-  Artifact,
-  Cleanup,
-  Package,
-  MirrorSource,
-  Environment,
-} from "./types";
-import { api } from "./api";
 import { SettingsPage } from "./SettingsPage";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  Alert,
-  App as AntApp,
-  Button,
-  Card,
-  ConfigProvider,
-  Flex,
-  Form,
-  Layout,
-  List,
-  Menu,
-  Space,
-  Steps,
-  Tooltip,
-  Typography,
-} from "antd";
-import zhCN from "antd/locale/zh_CN";
-import {
-  AppstoreOutlined,
-  BuildOutlined,
-  CheckCircleOutlined,
-  CloseCircleOutlined,
-  CloudServerOutlined,
-  DeleteOutlined,
-  DownloadOutlined,
-  FileOutlined,
-  FileTextOutlined,
-  FolderOpenOutlined,
-  GithubOutlined,
-  HistoryOutlined,
-  HddOutlined,
-  LoadingOutlined,
-  LogoutOutlined,
-  ReloadOutlined,
-  SettingOutlined,
-  StopOutlined,
-} from "@ant-design/icons";
-import {
-  availableRecommendations,
-  effectiveDefaultPackages,
-  hasWirelessDriver,
-  resolveChineseTranslations,
-  visibleInCategory,
-} from "./packageSelection";
+import { api } from "./api";
 import { formatBytes } from "./format";
+import { useWorkspace } from "./useWorkspace";
+import TreasuryRoot from "./mui-treasury/layout/Root";
+import TreasuryContent from "./mui-treasury/layout/Content";
 import "./App.css";
-
-const { Content, Sider } = Layout;
-const { Title, Text } = Typography;
 
 const statuses: Record<string, string> = {
   queued: "等待中",
@@ -82,1067 +66,599 @@ const statuses: Record<string, string> = {
   cleaned: "产物已清理",
 };
 const nav = [
-  { key: "build", icon: <BuildOutlined />, label: "固件构建" },
-  { key: "history", icon: <HistoryOutlined />, label: "构建记录" },
-  { key: "sources", icon: <CloudServerOutlined />, label: "软件源站" },
-  { key: "environment", icon: <AppstoreOutlined />, label: "构建环境" },
-  { key: "settings", icon: <SettingOutlined />, label: "系统设置" },
+  { key: "build", icon: <BuildOutlinedIcon />, label: "固件构建" },
+  { key: "history", icon: <HistoryOutlinedIcon />, label: "构建记录" },
+  { key: "sources", icon: <CloudOutlinedIcon />, label: "软件源站" },
+  { key: "environment", icon: <StorageOutlinedIcon />, label: "构建环境" },
+  { key: "settings", icon: <SettingsOutlinedIcon />, label: "系统设置" },
 ];
-
 function Workspace({ onLogout }: { onLogout: () => void }) {
-  const { message, modal } = AntApp.useApp();
-  const [starting, setStarting] = useState(false);
-  const [lastAttempt, setLastAttempt] = useState<BuildAttempt | null>(null);
-  const [page, setPage] = useState("build");
-  const [step, setStep] = useState(0);
-  const [draft, setDraft] = useState<Build>(initialBuild);
-  const [mirrors, setMirrors] = useState<MirrorSource[]>([]);
-  const [mirrorForm] = Form.useForm<{ mirrors: MirrorSource[] }>();
-  const [savingMirrors, setSavingMirrors] = useState(false);
-  const [registry, setRegistry] = useState("");
-  const [ecosystem, setEcosystem] = useState("immortalwrt");
-  const [switchingEcosystem, setSwitchingEcosystem] = useState(false);
-  const [proxyType, setProxyType] = useState("none");
-  const [proxyAddress, setProxyAddress] = useState("");
-  const [savingProxy, setSavingProxy] = useState(false);
-  const [dataDir, setDataDir] = useState("");
-  const [versions, setVersions] = useState<string[]>([]);
-  const [deviceVersion, setDeviceVersion] = useState("");
-  const [query, setQuery] = useState("");
-  const [devices, setDevices] = useState<Device[]>([]);
-  const [devicePage, setDevicePage] = useState(1);
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [loadingDevices, setLoadingDevices] = useState(false);
-  const [packageData, setPackageData] = useState<Package[]>([]);
-  const [packageWarnings, setPackageWarnings] = useState<string[]>([]);
-  const [loadingPackages, setLoadingPackages] = useState(false);
-  const [packageError, setPackageError] = useState("");
-  const [packageRetry, setPackageRetry] = useState(0);
-  const [packageSearch, setPackageSearch] = useState("");
-  const initializedDevice = useRef(false);
-  const [packageFeed, setPackageFeed] = useState("all");
-  const [env, setEnv] = useState<Environment | null>(null);
-  const [checkingEnv, setCheckingEnv] = useState(true);
-  const [jobs, setJobs] = useState<Job[]>([]);
-  const [job, setJob] = useState<Job | null>(null);
-  const [artifacts, setArtifacts] = useState<Artifact[]>([]);
-  const [log, setLog] = useState("");
-  const patch = useCallback(
-    (v: Partial<Build>) => setDraft((d) => ({ ...d, ...v })),
-    [],
-  );
-  const error = useCallback(
-    (e: unknown) => {
-      void message.error(e instanceof Error ? e.message : "操作失败");
-    },
-    [message],
-  );
-  const environment = useCallback(async () => {
-    setCheckingEnv(true);
-    try {
-      setEnv(await api("/environment"));
-    } catch (e) {
-      setEnv(null);
-      error(e);
-    } finally {
-      setCheckingEnv(false);
-    }
-  }, [error]);
-  const loadJobs = useCallback(async () => {
-    try {
-      setJobs(await api("/jobs"));
-    } catch (e) {
-      error(e);
-    }
-  }, [error]);
-  useEffect(() => {
-    api<Environment>("/environment")
-      .then(setEnv)
-      .catch(error)
-      .finally(() => setCheckingEnv(false));
-    api<{
-      ecosystem: string;
-      mirrors: MirrorSource[];
-      registry: string;
-      proxy: string;
-      data_dir: string;
-    }>("/settings")
-      .then((x) => {
-        setEcosystem(x.ecosystem);
-        setRegistry(x.registry);
-        if (x.proxy) {
-          const [kind, address] = x.proxy.split("://");
-          setProxyType(kind);
-          setProxyAddress(address);
-        }
-        setDataDir(x.data_dir);
-        setMirrors(x.mirrors);
-        mirrorForm.setFieldsValue({ mirrors: x.mirrors });
-        if (x.mirrors[0]) patch({ mirror: x.mirrors[0].url });
-      })
-      .catch(error);
-  }, [error, patch, mirrorForm]);
-  useEffect(() => {
-    if (!draft.mirror) return;
-    const controller = new AbortController();
-    api<{ stable: string; versions: string[] }>(
-      "/versions?mirror=" + encodeURIComponent(draft.mirror),
-      { signal: controller.signal },
-    )
-      .then((x) => {
-        setVersions(x.versions);
-        setDeviceVersion((v) => (x.versions.includes(v) ? v : x.stable));
-      })
-      .catch((e) => {
-        if (!controller.signal.aborted) error(e);
-      });
-    return () => controller.abort();
-  }, [draft.mirror, error]);
-  useEffect(() => {
-    if (!deviceVersion || !draft.mirror) return;
-    const controller = new AbortController();
-    const timer = setTimeout(() => {
-      setLoadingDevices(true);
-      const p = new URLSearchParams({
-        version: deviceVersion,
-        mirror: draft.mirror,
-      });
-      api<{ items: Device[] }>("/devices?" + p, { signal: controller.signal })
-        .then((x) => setDevices(x.items))
-        .catch((e) => {
-          if (!controller.signal.aborted) error(e);
-        })
-        .finally(() => {
-          if (!controller.signal.aborted) setLoadingDevices(false);
-        });
-    }, 0);
-    return () => {
-      clearTimeout(timer);
-      controller.abort();
-    };
-  }, [deviceVersion, draft.mirror, error]);
-  const filteredDevices = useMemo(() => {
-    const search = query.trim().toLowerCase();
-    return search
-      ? devices.filter((d) =>
-          `${d.title} ${d.id} ${d.target}`.toLowerCase().includes(search),
-        )
-      : devices;
-  }, [devices, query]);
-  useEffect(() => {
-    if (!draft.version || !draft.profile) return;
-    const controller = new AbortController();
-    const p = new URLSearchParams({
-      version: draft.version,
-      target: draft.target,
-      profile: draft.profile,
-      mirror: draft.mirror,
-    });
-    api<Profile>("/profile?" + p, { signal: controller.signal })
-      .then(setProfile)
-      .catch((e) => {
-        if (!controller.signal.aborted) {
-          setProfile(null);
-          error(e);
-        }
-      });
-    return () => controller.abort();
-  }, [draft.version, draft.target, draft.profile, draft.mirror, error]);
-  useEffect(() => {
-    if (step !== 1 || !draft.profile || initializedDevice.current) return;
-    const controller = new AbortController();
-    const p = new URLSearchParams({
-      version: draft.version,
-      target: draft.target,
-      profile: draft.profile,
-      mirror: draft.mirror,
-    });
-    api<{ items: Package[]; warnings: string[] }>("/packages?" + p, {
-      signal: controller.signal,
-    })
-      .then((x) => {
-        setPackageData(x.items);
-        setPackageWarnings(x.warnings);
-        if (!initializedDevice.current) {
-          const defaults = availableRecommendations(
-            new Set(x.items.map((p) => p.name)),
-          );
-          if (ecosystem === "openwrt" && x.items.some((p) => p.name === "luci"))
-            defaults.packages.push("luci");
-          setDraft((d) => ({
-            ...d,
-            packages: defaults.packages,
-            theme: defaults.theme,
-          }));
-          initializedDevice.current = true;
-        }
-      })
-      .catch((e) => {
-        if (!controller.signal.aborted) {
-          setPackageData([]);
-          setPackageError(
-            e instanceof Error ? e.message : "软件包目录加载失败",
-          );
-        }
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoadingPackages(false);
-      });
-    return () => controller.abort();
-  }, [
+  const {
+    notice,
+    setNotice,
+    confirmation,
+    setConfirmation,
+    confirmBusy,
+    setConfirmBusy,
+    drawerOpen,
+    setDrawerOpen,
+    starting,
+    page,
+    setPage,
     step,
-    draft.version,
-    draft.target,
-    draft.profile,
-    draft.mirror,
+    setStep,
+    draft,
+    patch,
+    mirrors,
+    savingMirrors,
+    registry,
+    setRegistry,
     ecosystem,
-    packageRetry,
-  ]);
-  useEffect(() => {
-    if (page === "history") api<Job[]>("/jobs").then(setJobs).catch(error);
-  }, [page, error]);
-  const jobId = job?.id;
-  const jobStatus = job?.status;
-  useEffect(() => {
-    if (
-      page !== "build" ||
-      step !== 4 ||
-      !jobId ||
-      !jobStatus ||
-      !["queued", "running"].includes(jobStatus)
-    )
-      return;
-    const id = jobId;
-    const controller = new AbortController();
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const tick = async () => {
-      try {
-        const [current, response] = await Promise.all([
-          api<Job>("/jobs/" + id, { signal: controller.signal }),
-          fetch("/api/jobs/" + id + "/log", { signal: controller.signal }),
-        ]);
-        if (!response.ok) throw Error("读取构建日志失败");
-        const text = await response.text();
-        if (controller.signal.aborted) return;
-        setLog(text);
-        setJob(current);
-        if (["queued", "running"].includes(current.status))
-          timer = setTimeout(tick, 1500);
-      } catch (e) {
-        if (!controller.signal.aborted) {
-          error(e);
-          timer = setTimeout(tick, 5000);
-        }
-      }
-    };
-    void tick();
-    return () => {
-      controller.abort();
-      if (timer) clearTimeout(timer);
-    };
-  }, [jobId, jobStatus, page, step, error]);
-  useEffect(() => {
-    if (
-      page !== "build" ||
-      step !== 4 ||
-      !jobId ||
-      !jobStatus ||
-      ["queued", "running"].includes(jobStatus)
-    )
-      return;
-    const controller = new AbortController();
-    fetch("/api/jobs/" + jobId + "/log", { signal: controller.signal })
-      .then((r) => {
-        if (!r.ok) throw Error("读取构建日志失败");
-        return r.text();
-      })
-      .then(setLog)
-      .catch((e) => {
-        if (!controller.signal.aborted) error(e);
-      });
-    return () => controller.abort();
-  }, [jobId, jobStatus, page, step, error]);
-  useEffect(() => {
-    if (!jobId || jobStatus !== "success") return;
-    const controller = new AbortController();
-    api<Artifact[]>("/jobs/" + jobId + "/files", { signal: controller.signal })
-      .then(setArtifacts)
-      .catch((e) => {
-        if (!controller.signal.aborted) error(e);
-      });
-    return () => controller.abort();
-  }, [jobId, jobStatus, error]);
-  const availableNames = useMemo(
-    () => new Set(packageData.map((p) => p.name)),
-    [packageData],
-  );
-  const defaults = useMemo(
-    () =>
-      effectiveDefaultPackages(
-        profile?.default_packages || [],
-        profile?.device_packages || [],
-      ),
-    [profile],
-  );
-  const defaultSet = useMemo(() => new Set(defaults), [defaults]);
-  const activeDefaults = useMemo(
-    () => defaults.filter((name) => !draft.remove.includes(name)),
-    [defaults, draft.remove],
-  );
-  const selectedManually = useMemo(
-    () => [...draft.packages, ...(draft.theme ? [draft.theme] : [])],
-    [draft.packages, draft.theme],
-  );
-  const translations = useMemo(
-    () =>
-      resolveChineseTranslations(
-        [...activeDefaults, ...selectedManually],
-        availableNames,
-      ),
-    [activeDefaults, selectedManually, availableNames],
-  );
-  const automaticTranslations = useMemo(
-    () =>
-      new Set(
-        translations.automatic.filter(
-          (name) =>
-            !draft.packages.includes(name) &&
-            !defaultSet.has(name) &&
-            !draft.remove.includes(name),
-        ),
-      ),
-    [translations.automatic, draft.packages, defaultSet, draft.remove],
-  );
-  const additionalPackages = useMemo(
-    () =>
-      [...new Set([...draft.packages, ...automaticTranslations])].filter(
-        (name) => !defaultSet.has(name),
-      ),
-    [draft.packages, automaticTranslations, defaultSet],
-  );
-  const additionalCount =
-    additionalPackages.length +
-    (draft.theme && !defaultSet.has(draft.theme) ? 1 : 0);
-  const selectedPackages = useMemo(
-    () => [
-      ...new Set([
-        ...activeDefaults,
-        ...selectedManually,
-        ...automaticTranslations,
-      ]),
-    ],
-    [activeDefaults, selectedManually, automaticTranslations],
-  );
-  const wirelessSupported = useMemo(
-    () => hasWirelessDriver(selectedPackages),
-    [selectedPackages],
-  );
-  const pppSupported =
-    availableNames.has("ppp-mod-pppoe") &&
-    !draft.remove.includes("ppp-mod-pppoe");
-  const categorizedPackages = useMemo(
-    () =>
-      packageData.filter(
-        (p) =>
-          visibleInCategory(p.name, packageFeed, p.category) &&
-          p.name.toLowerCase().includes(packageSearch.trim().toLowerCase()),
-      ),
-    [packageData, packageFeed, packageSearch],
-  );
-  const choose = (d: Device) => {
-    if (
-      draft.version === deviceVersion &&
-      draft.target === d.target &&
-      draft.profile === d.id
-    )
-      return;
-    initializedDevice.current = false;
-    setProfile(null);
-    setPackageData([]);
-    patch({
-      target: d.target,
-      profile: d.id,
-      device: d.title,
-      version: deviceVersion,
-      packages: [],
-      theme: "",
-      remove: [],
-      rootfs_size: 0,
-      wifi_ssid: "",
-      wifi_password: "",
-      ppp_username: "",
-      ppp_password: "",
-    });
-  };
-  const toggleDefault = (name: string, remove: boolean) =>
-    setDraft((d) => ({
-      ...d,
-      remove: remove
-        ? [...new Set([...d.remove, name])]
-        : d.remove.filter((p) => p !== name),
-      packages: remove ? d.packages.filter((p) => p !== name) : d.packages,
-      theme: remove && d.theme === name ? "" : d.theme,
-    }));
-  const selectPackage = (name: string, value: boolean) =>
-    setDraft((d) => {
-      if (defaultSet.has(name))
-        return {
-          ...d,
-          remove: value
-            ? d.remove.filter((p) => p !== name)
-            : [...new Set([...d.remove, name])],
-          packages: d.packages.filter((p) => p !== name),
-          theme: name.startsWith("luci-theme-")
-            ? value
-              ? name
-              : d.theme === name
-                ? ""
-                : d.theme
-            : d.theme,
-        };
-      if (name.startsWith("luci-theme-"))
-        return {
-          ...d,
-          theme: value ? name : "",
-          packages: d.packages.filter((p) => p !== name),
-        };
-      return {
-        ...d,
-        packages: value
-          ? [...new Set([...d.packages, name])]
-          : d.packages.filter((p) => p !== name),
-      };
-    });
-  const nextStep = () => {
-    if (step === 0) {
-      setPackageError("");
-      setLoadingPackages(!initializedDevice.current);
-    }
-    if (
-      step === 1 &&
-      (loadingPackages || packageError || packageData.length === 0)
-    ) {
-      void message.warning("请先加载软件包目录");
-      return;
-    }
-    if (
-      step === 1 &&
-      selectedPackages.some((name) => draft.remove.includes(name))
-    ) {
-      void message.warning("已选软件与移除列表冲突，请先调整默认软件包");
-      return;
-    }
-    if (
-      step === 1 &&
-      draft.theme &&
-      packageData.length > 0 &&
-      !availableNames.has(draft.theme)
-    ) {
-      void message.warning("当前软件源没有所选主题，请在软件列表中取消或更换");
-      return;
-    }
-    if (step === 2) {
-      const size = (s: string) => new TextEncoder().encode(s).length;
-      if ((draft.wifi_ssid === "") !== (draft.wifi_password === "")) {
-        void message.warning("请同时填写 Wi-Fi 名称和密码");
-        return;
-      }
-      if (size(draft.wifi_ssid) > 32) {
-        void message.warning("Wi-Fi 名称不能超过 32 字节");
-        return;
-      }
-      if (
-        draft.wifi_password &&
-        (size(draft.wifi_password) < 8 || size(draft.wifi_password) > 63)
-      ) {
-        void message.warning("Wi-Fi 密码必须为 8 到 63 字节");
-        return;
-      }
-      if ((draft.ppp_username === "") !== (draft.ppp_password === "")) {
-        void message.warning("请同时填写 PPPoE 账号和密码");
-        return;
-      }
-      if (
-        draft.rootfs_size &&
-        (draft.rootfs_size < 64 || draft.rootfs_size > 32768)
-      ) {
-        void message.warning("根分区大小应为 64 到 32768 MiB");
-        return;
-      }
-      if (draft.remove.includes(draft.theme) && draft.theme) {
-        void message.warning("不能同时选择和移除同一个主题");
-        return;
-      }
-      if (draft.ppp_username && draft.remove.includes("ppp-mod-pppoe")) {
-        void message.warning("PPPoE 配置需要 ppp-mod-pppoe 软件包");
-        return;
-      }
-    }
-    setStep(step + 1);
-  };
-  const start = async (previousBody?: string) => {
-    if (starting) return;
-    setStarting(true);
-    try {
-      const body =
-        previousBody ??
-        JSON.stringify({
-          ...draft,
-          ecosystem,
-          packages: additionalPackages,
-          ...(wirelessSupported ? {} : { wifi_ssid: "", wifi_password: "" }),
-          ...(pppSupported ? {} : { ppp_username: "", ppp_password: "" }),
-        });
-      const x = await api<{ id: string }>("/jobs", { method: "POST", body });
-      setLastAttempt({ jobId: x.id, body });
-      setLog("");
-      setArtifacts([]);
-      setJob(await api("/jobs/" + x.id));
-      setStep(4);
-    } catch (e) {
-      error(e);
-    } finally {
-      setStarting(false);
-    }
-  };
-  const saveMirrors = async (values: { mirrors: MirrorSource[] }) => {
-    setSavingMirrors(true);
-    try {
-      const result = await api<{ mirrors: MirrorSource[] }>("/settings", {
-        method: "PUT",
-        body: JSON.stringify(values),
-      });
-      const m = result.mirrors;
-      setMirrors(m);
-      mirrorForm.setFieldsValue({ mirrors: m });
-      if (!m.some((source) => source.url === draft.mirror)) {
-        patch({
-          mirror: m[0].url,
-          profile: "",
-          target: "",
-          device: "",
-          version: "",
-          packages: [],
-          remove: [],
-          theme: "",
-          wifi_ssid: "",
-          wifi_password: "",
-          ppp_username: "",
-          ppp_password: "",
-          rootfs_size: 0,
-        });
-        setProfile(null);
-        setPackageData([]);
-        setLoadingPackages(false);
-        setStep(0);
-        setDeviceVersion("");
-        setVersions([]);
-        setDevices([]);
-        setDevicePage(1);
-      }
-      void message.success("软件源已保存");
-    } catch (e) {
-      error(e);
-    } finally {
-      setSavingMirrors(false);
-    }
-  };
-  const saveProxy = async () => {
-    setSavingProxy(true);
-    try {
-      await api("/settings/proxy", {
-        method: "PUT",
-        body: JSON.stringify({
-          proxy:
-            proxyType === "none" ? "" : `${proxyType}://${proxyAddress.trim()}`,
-        }),
-      });
-      void message.success("代理设置已保存");
-    } catch (e) {
-      error(e);
-    } finally {
-      setSavingProxy(false);
-    }
-  };
-  const changeEcosystem = async (value: string) => {
-    setSwitchingEcosystem(true);
-    try {
-      const settings = await api<{
-        ecosystem: string;
-        mirrors: MirrorSource[];
-      }>("/settings/ecosystem", {
-        method: "PUT",
-        body: JSON.stringify({ ecosystem: value }),
-      });
-      setEcosystem(settings.ecosystem);
-      setMirrors(settings.mirrors);
-      mirrorForm.setFieldsValue({ mirrors: settings.mirrors });
-      initializedDevice.current = false;
-      setDraft({ ...initialBuild, mirror: settings.mirrors[0].url });
-      setProfile(null);
-      setPackageData([]);
-      setPackageWarnings([]);
-      setDeviceVersion("");
-      setVersions([]);
-      setDevices([]);
-      setDevicePage(1);
-      setStep(0);
-      setJob(null);
-      void message.success("固件生态已切换");
-    } catch (e) {
-      error(e);
-    } finally {
-      setSwitchingEcosystem(false);
-    }
-  };
-  const saveRegistry = async () => {
-    try {
-      const result = await api<{ registry: string }>("/settings/registry", {
-        method: "PUT",
-        body: JSON.stringify({ registry }),
-      });
-      setRegistry(result.registry);
-      void message.success("镜像加速设置已保存");
-    } catch (e) {
-      error(e);
-    }
-  };
-  const cleanup = async (j: Job) => {
-    try {
-      const info = await api<Cleanup>("/jobs/" + j.id + "/cleanup");
-      modal.confirm({
-        title: "清理构建产物？",
-        okText: "清理",
-        cancelText: "取消",
-        okButtonProps: { danger: true },
-        content: (
-          <Space orientation="vertical" size="small">
-            <Text>
-              将删除 {formatBytes(info.bytes)}{" "}
-              产物并检查构建容器；构建记录和日志保留。
-            </Text>
-            <Text type="secondary">{info.path}</Text>
-            <Text>
-              将删除该任务使用的镜像引用，包括此前已存在或其他任务使用的镜像。
-            </Text>
-            {info.image && <Text type="secondary">{info.image}</Text>}
-          </Space>
-        ),
-        onOk: async () => {
-          try {
-            await api("/jobs/" + j.id, {
-              method: "DELETE",
-            });
-            void message.success("产物、构建容器及关联镜像已清理");
-            await loadJobs();
-            if (job?.id === j.id) {
-              setJob(null);
-              setStep(0);
-              setPage("history");
-            }
-          } catch (e) {
-            error(e);
-            throw e;
-          }
-        },
-      });
-    } catch (e) {
-      error(e);
-    }
-  };
-  const showJob = (j: Job) => {
-    setJob(j);
-    setLog("");
-    setArtifacts([]);
-    setPage("build");
-    setStep(4);
-  };
-  const newBuild = () => {
-    setLastAttempt(null);
-    initializedDevice.current = false;
-    setDraft({ ...initialBuild, mirror: draft.mirror });
-    setProfile(null);
-    setPackageData([]);
-    setPackageWarnings([]);
-    setPackageError("");
-    setJob(null);
-    setStep(0);
-  };
-  const retryRequest = job ? retryBody(lastAttempt, job.id) : null;
+    switchingEcosystem,
+    proxyType,
+    setProxyType,
+    proxyAddress,
+    setProxyAddress,
+    savingProxy,
+    dataDir,
+    versions,
+    deviceVersion,
+    setDeviceVersion,
+    query,
+    setQuery,
+    setDevices,
+    devicePage,
+    setDevicePage,
+    profile,
+    setProfile,
+    loadingDevices,
+    deviceError,
+    versionError,
+    profileError,
+    setDeviceRetry,
+    packageData,
+    packageWarnings,
+    loadingPackages,
+    setLoadingPackages,
+    packageError,
+    setPackageError,
+    setPackageRetry,
+    packageSearch,
+    setPackageSearch,
+    packageFeed,
+    setPackageFeed,
+    env,
+    checkingEnv,
+    jobs,
+    job,
+    artifacts,
+    log,
+    error,
+    environment,
+    loadJobs,
+    filteredDevices,
+    defaultSet,
+    automaticTranslations,
+    additionalCount,
+    selectedPackages,
+    wirelessSupported,
+    pppSupported,
+    availableNames,
+    categorizedPackages,
+    choose,
+    toggleDefault,
+    selectPackage,
+    nextStep,
+    start,
+    saveMirrors,
+    saveProxy,
+    changeEcosystem,
+    saveRegistry,
+    cleanup,
+    showJob,
+    newBuild,
+    retryRequest,
+    setVersions,
+  } = useWorkspace();
   const refresh = (
     <Tooltip title="刷新">
-      <Button
+      <IconButton
         aria-label="刷新"
-        type="text"
-        icon={<ReloadOutlined />}
         onClick={page === "history" ? loadJobs : environment}
-      />
+      >
+        <RefreshOutlinedIcon />
+      </IconButton>
     </Tooltip>
   );
-  return (
-    <Layout className="app-layout">
-      <Sider
-        className="app-sider"
-        theme="light"
-        width={216}
-        breakpoint="lg"
-        collapsedWidth="0"
+  const navigation = (
+    <Box
+      sx={{
+        width: 232,
+        height: "100%",
+        display: "flex",
+        flexDirection: "column",
+        bgcolor: "background.sidebar",
+      }}
+    >
+      <Stack
+        direction="row"
+        spacing={1.5}
+        sx={{ alignItems: "center", px: 3, py: 2.5 }}
       >
-        <div className="brand">
-          <img className="brand-icon" src="/favicon.svg" alt="" />{" "}
-          <Text strong>WrtKit</Text>
-        </div>
-        <Menu
-          mode="inline"
-          selectedKeys={[page]}
-          items={nav}
-          onClick={({ key }) => {
-            setPage(key);
-            if (key === "environment") void environment();
-          }}
+        <Box
+          component="img"
+          src="/favicon.svg"
+          alt=""
+          sx={{ width: 30, height: 30 }}
         />
-        <div className="sidebar-actions">
-          <Tooltip title="退出登录">
-            <Button
-              type="text"
-              icon={<LogoutOutlined />}
-              aria-label="退出登录"
+        <Typography variant="h6">WrtKit</Typography>
+      </Stack>
+      <Divider />
+      <List sx={{ px: 1, py: 2 }}>
+        {nav.map((item) => (
+          <ListItem key={item.key} disablePadding>
+            <ListItemButton
+              selected={page === item.key}
               onClick={() => {
-                void api("/auth/logout", { method: "POST" })
-                  .then(onLogout)
-                  .catch(error);
+                setPage(item.key);
+                setDrawerOpen(false);
+                if (item.key === "environment") void environment();
               }}
-            />
-          </Tooltip>
-          <Tooltip title="GitHub">
-            <Button
-              type="text"
-              icon={<GithubOutlined />}
-              aria-label="GitHub"
-              href="https://github.com/sky22333/wrtkit"
-              target="_blank"
-              rel="noopener noreferrer"
-            />
-          </Tooltip>
-        </div>
-      </Sider>
-      <Layout>
-        <Content className="app-content">
-          {page === "build" && (
-            <>
-              <Card className="build-workspace">
-                {step < 4 && (
-                  <Steps
-                    className="build-steps"
-                    current={Math.min(step, 3)}
-                    items={[
-                      { title: "选择设备", icon: <HddOutlined /> },
-                      { title: "选择软件", icon: <AppstoreOutlined /> },
-                      { title: "配置固件", icon: <SettingOutlined /> },
-                      { title: "确认构建", icon: <CheckCircleOutlined /> },
-                    ]}
-                  />
-                )}
-                <div className="step-content" key={step}>
-                  {step === 0 && (
-                    <DeviceStep
-                      draft={draft}
-                      patch={patch}
-                      mirrors={mirrors}
-                      versions={versions}
-                      deviceVersion={deviceVersion}
-                      setDeviceVersion={setDeviceVersion}
-                      setProfile={setProfile}
-                      setVersions={setVersions}
-                      setDevices={setDevices}
-                      setDevicePage={setDevicePage}
-                      query={query}
-                      setQuery={setQuery}
-                      devicePage={devicePage}
-                      loadingDevices={loadingDevices}
-                      devices={filteredDevices}
-                      choose={choose}
-                    />
-                  )}
-                  {step === 1 && (
-                    <PackagesStep
-                      draft={draft}
-                      packageWarnings={packageWarnings}
-                      selectedPackages={selectedPackages}
-                      defaultSet={defaultSet}
-                      automaticTranslations={automaticTranslations}
-                      selectPackage={selectPackage}
-                      toggleDefault={toggleDefault}
-                      packageData={packageData}
-                      availableNames={availableNames}
-                      packageFeed={packageFeed}
-                      setPackageFeed={setPackageFeed}
-                      packageSearch={packageSearch}
-                      setPackageSearch={setPackageSearch}
-                      loadingPackages={loadingPackages}
-                      packageError={packageError}
-                      retryPackages={() => {
-                        setPackageError("");
-                        setLoadingPackages(true);
-                        setPackageRetry((n) => n + 1);
-                      }}
-                      categorizedPackages={categorizedPackages}
-                      additionalCount={additionalCount}
-                    />
-                  )}
-                  {step === 2 && (
-                    <FirmwareConfigStep
-                      draft={draft}
-                      patch={patch}
-                      profile={profile}
-                      wirelessSupported={wirelessSupported}
-                      pppSupported={pppSupported}
-                    />
-                  )}
-                  {step === 3 && (
-                    <ReviewStep
-                      draft={draft}
-                      additionalCount={additionalCount}
-                      wirelessSupported={wirelessSupported}
-                      pppSupported={pppSupported}
-                      env={env}
-                    />
-                  )}
-                  {step === 4 && job && (
-                    <Space
-                      orientation="vertical"
-                      size="middle"
-                      className="full"
-                    >
-                      <Flex justify="space-between">
-                        <div>
-                          <Title level={4}>
-                            <Space>
-                              {["queued", "running"].includes(job.status) ? (
-                                <LoadingOutlined />
-                              ) : job.status === "success" ? (
-                                <CheckCircleOutlined />
-                              ) : job.status === "failed" ? (
-                                <CloseCircleOutlined />
-                              ) : (
-                                <FileTextOutlined />
-                              )}
-                              {statuses[job.status] || job.status}
-                            </Space>
-                          </Title>
-                          <Text type="secondary">
-                            {job.stage} · {job.request.device}
-                          </Text>
-                        </div>
-                      </Flex>
-                      {job.error && (
-                        <Alert type="error" showIcon title={job.error} />
-                      )}
-                      {["failed", "cancelled", "interrupted"].includes(
-                        job.status,
-                      ) &&
-                        !retryRequest && (
-                          <Alert
-                            type="info"
-                            showIcon
-                            title="原构建的敏感配置未保存，请新建构建并重新填写配置。"
-                          />
-                        )}
-                      <Card
-                        size="small"
-                        title={
-                          <Space>
-                            <FileTextOutlined />
-                            构建日志
-                          </Space>
-                        }
+              sx={{ mb: 0.5 }}
+            >
+              <ListItemIcon sx={{ minWidth: 40 }}>{item.icon}</ListItemIcon>
+              <ListItemText primary={item.label} />
+            </ListItemButton>
+          </ListItem>
+        ))}
+      </List>
+      <Box sx={{ flex: 1 }} />
+      <Divider />
+      <Stack direction="row" sx={{ px: 2, py: 1 }}>
+        <Tooltip title="退出登录">
+          <IconButton
+            aria-label="退出登录"
+            onClick={() =>
+              void api("/auth/logout", { method: "POST" })
+                .then(onLogout)
+                .catch(error)
+            }
+          >
+            <LogoutOutlinedIcon />
+          </IconButton>
+        </Tooltip>
+        <Tooltip title="项目 GitHub">
+          <IconButton
+            aria-label="打开项目 GitHub"
+            component="a"
+            href="https://github.com/sky22333/wrtkit"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <GitHubIcon />
+          </IconButton>
+        </Tooltip>
+      </Stack>
+    </Box>
+  );
+  return (
+    <>
+      <TreasuryRoot disableTransition>
+        <TreasuryContent>
+          <Box sx={{ display: "flex", minHeight: "100dvh" }}>
+            <Box
+              component="nav"
+              aria-label="主导航"
+              sx={{
+                display: { xs: "none", md: "block" },
+                borderRight: 1,
+                borderColor: "divider",
+                flexShrink: 0,
+              }}
+            >
+              {navigation}
+            </Box>
+            <Drawer open={drawerOpen} onClose={() => setDrawerOpen(false)}>
+              {navigation}
+            </Drawer>
+            <Box
+              sx={{
+                width: "100%",
+                minWidth: 0,
+                px: { xs: 2, md: 4 },
+                py: { xs: 2, md: 4 },
+                bgcolor: "background.paper",
+              }}
+            >
+              <Fade key={page} in timeout={120}>
+                <Box sx={{ maxWidth: 1120, mx: "auto" }}>
+                  <Box sx={{ display: { xs: "block", md: "none" }, mb: 2 }}>
+                    <Tooltip title="打开导航">
+                      <IconButton
+                        aria-label="打开导航"
+                        onClick={() => setDrawerOpen(true)}
                       >
-                        <pre className="log">{log || "正在等待构建输出…"}</pre>
-                      </Card>
-                      {job.status === "success" && (
-                        <List
-                          className="artifact-list"
-                          size="small"
-                          header={
-                            <Space>
-                              <FolderOpenOutlined />
-                              构建产物
-                            </Space>
+                        <MenuIcon />
+                      </IconButton>
+                    </Tooltip>
+                  </Box>
+                  {page === "build" && (
+                    <Box>
+                      {step < 4 && (
+                        <Box
+                          sx={{
+                            overflowX: "auto",
+                            pb: 3,
+                            mb: 3,
+                            borderBottom: 1,
+                            borderColor: "divider",
+                          }}
+                        >
+                          <Stepper activeStep={step} sx={{ minWidth: 520 }}>
+                            {[
+                              "选择设备",
+                              "选择软件",
+                              "配置固件",
+                              "确认构建",
+                            ].map((label) => (
+                              <Step key={label}>
+                                <StepLabel>{label}</StepLabel>
+                              </Step>
+                            ))}
+                          </Stepper>
+                        </Box>
+                      )}
+                      {step === 0 && (
+                        <DeviceStep
+                          draft={draft}
+                          patch={patch}
+                          mirrors={mirrors}
+                          versions={versions}
+                          deviceVersion={deviceVersion}
+                          setDeviceVersion={setDeviceVersion}
+                          setProfile={setProfile}
+                          setVersions={setVersions}
+                          setDevices={setDevices}
+                          setDevicePage={setDevicePage}
+                          query={query}
+                          setQuery={setQuery}
+                          devicePage={devicePage}
+                          loadingDevices={loadingDevices}
+                          loadError={
+                            versionError || deviceError || profileError
                           }
-                          bordered
-                          dataSource={artifacts}
-                          renderItem={(a) => (
-                            <List.Item
-                              actions={[
-                                <Tooltip key="download" title="下载">
-                                  <Button
-                                    type="text"
-                                    aria-label={"下载 " + a.name}
-                                    icon={<DownloadOutlined />}
-                                    href={
-                                      "/api/jobs/" +
-                                      job.id +
-                                      "/files/" +
-                                      encodeURIComponent(a.name)
-                                    }
-                                  />
-                                </Tooltip>,
-                              ]}
-                            >
-                              <List.Item.Meta
-                                avatar={<FileOutlined />}
-                                title={
-                                  <Text className="artifact-name">
-                                    {a.name}
-                                  </Text>
-                                }
-                                description={formatBytes(a.size)}
-                              />
-                            </List.Item>
-                          )}
+                          retryLoad={() => setDeviceRetry((value) => value + 1)}
+                          devices={filteredDevices}
+                          choose={choose}
                         />
                       )}
-                      {["queued", "running"].includes(job.status) && (
-                        <Button
-                          danger
-                          icon={<StopOutlined />}
-                          onClick={() =>
-                            modal.confirm({
-                              title: "取消当前构建？",
-                              onOk: () =>
-                                api("/jobs/" + job.id + "/cancel", {
-                                  method: "POST",
-                                }).catch(error),
-                            })
-                          }
-                        >
-                          取消构建
-                        </Button>
+                      {step === 1 && (
+                        <PackagesStep
+                          draft={draft}
+                          packageWarnings={packageWarnings}
+                          selectedPackages={selectedPackages}
+                          defaultSet={defaultSet}
+                          automaticTranslations={automaticTranslations}
+                          selectPackage={selectPackage}
+                          toggleDefault={toggleDefault}
+                          packageData={packageData}
+                          availableNames={availableNames}
+                          packageFeed={packageFeed}
+                          setPackageFeed={setPackageFeed}
+                          packageSearch={packageSearch}
+                          setPackageSearch={setPackageSearch}
+                          loadingPackages={loadingPackages}
+                          packageError={packageError}
+                          retryPackages={() => {
+                            setPackageError("");
+                            setLoadingPackages(true);
+                            setPackageRetry((n) => n + 1);
+                          }}
+                          categorizedPackages={categorizedPackages}
+                          additionalCount={additionalCount}
+                        />
                       )}
-                    </Space>
+                      {step === 2 && (
+                        <FirmwareConfigStep
+                          draft={draft}
+                          patch={patch}
+                          profile={profile}
+                          wirelessSupported={wirelessSupported}
+                          pppSupported={pppSupported}
+                        />
+                      )}
+                      {step === 3 && (
+                        <ReviewStep
+                          draft={draft}
+                          additionalCount={additionalCount}
+                          wirelessSupported={wirelessSupported}
+                          pppSupported={pppSupported}
+                          env={env}
+                        />
+                      )}
+                      {step === 4 && job && (
+                        <Stack spacing={2}>
+                          <Box>
+                            <Stack
+                              direction="row"
+                              spacing={1}
+                              sx={{ alignItems: "center" }}
+                            >
+                              <Typography variant="h5">
+                                {statuses[job.status] || job.status}
+                              </Typography>
+                              <Chip size="small" label={job.stage} />
+                            </Stack>
+                            <Typography color="text.secondary">
+                              {job.request.device}
+                            </Typography>
+                          </Box>
+                          {["queued", "running"].includes(job.status) && (
+                            <LinearProgress />
+                          )}
+                          {job.error && (
+                            <Alert severity="error">{job.error}</Alert>
+                          )}
+                          {["failed", "cancelled", "interrupted"].includes(
+                            job.status,
+                          ) &&
+                            !retryRequest && (
+                              <Alert severity="info">
+                                原构建的敏感配置未保存，请新建构建并重新填写配置。
+                              </Alert>
+                            )}
+                          <Box>
+                            <Typography variant="subtitle1" sx={{ mb: 1 }}>
+                              构建日志
+                            </Typography>
+                            <Paper
+                              component="pre"
+                              variant="outlined"
+                              className="build-log"
+                            >
+                              {log || "正在等待构建输出…"}
+                            </Paper>
+                          </Box>
+                          {job.status === "success" && (
+                            <Box>
+                              <Typography variant="subtitle1">
+                                构建产物
+                              </Typography>
+                              <List>
+                                {artifacts.map((a) => (
+                                  <ListItem
+                                    key={a.name}
+                                    disableGutters
+                                    secondaryAction={
+                                      <Tooltip title="下载">
+                                        <IconButton
+                                          aria-label={`下载 ${a.name}`}
+                                          component="a"
+                                          href={`/api/jobs/${job.id}/files/${encodeURIComponent(a.name)}`}
+                                        >
+                                          <DownloadOutlinedIcon />
+                                        </IconButton>
+                                      </Tooltip>
+                                    }
+                                  >
+                                    <ListItemText
+                                      primary={a.name}
+                                      secondary={formatBytes(a.size)}
+                                      sx={{ overflowWrap: "anywhere" }}
+                                    />
+                                  </ListItem>
+                                ))}
+                              </List>
+                              {!artifacts.length && (
+                                <Typography color="text.secondary">
+                                  没有可下载的产物
+                                </Typography>
+                              )}
+                            </Box>
+                          )}
+                          {["queued", "running"].includes(job.status) && (
+                            <Box>
+                              <Button
+                                color="error"
+                                variant="outlined"
+                                onClick={() =>
+                                  setConfirmation({
+                                    title: "取消当前构建？",
+                                    detail: (
+                                      <Typography>当前构建将停止。</Typography>
+                                    ),
+                                    action: async () => {
+                                      await api("/jobs/" + job.id + "/cancel", {
+                                        method: "POST",
+                                      });
+                                    },
+                                  })
+                                }
+                              >
+                                取消构建
+                              </Button>
+                            </Box>
+                          )}
+                        </Stack>
+                      )}
+                      <Divider sx={{ my: 3 }} />
+                      <Stack
+                        direction="row"
+                        sx={{
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          flexWrap: "wrap",
+                          gap: 2,
+                        }}
+                      >
+                        <Typography variant="body2" color="text.secondary">
+                          {draft.device && `${draft.device} · ${draft.version}`}
+                        </Typography>
+                        <Stack
+                          direction="row"
+                          spacing={1}
+                          sx={{ flexWrap: "wrap", rowGap: 1 }}
+                        >
+                          {step > 0 && step < 4 && (
+                            <Button onClick={() => setStep(step - 1)}>
+                              上一步
+                            </Button>
+                          )}
+                          {step < 3 && (
+                            <Button
+                              variant="contained"
+                              disabled={
+                                (step === 0 && (!draft.profile || !profile)) ||
+                                (step === 1 &&
+                                  (loadingPackages ||
+                                    !!packageError ||
+                                    packageData.length === 0))
+                              }
+                              onClick={nextStep}
+                            >
+                              下一步
+                            </Button>
+                          )}
+                          {step === 3 && (
+                            <Button
+                              variant="contained"
+                              disabled={!env?.available || starting}
+                              onClick={() => void start()}
+                            >
+                              {starting ? "正在开始…" : "开始构建"}
+                            </Button>
+                          )}
+                          {step === 4 &&
+                            job &&
+                            retryRequest &&
+                            ["failed", "cancelled", "interrupted"].includes(
+                              job.status,
+                            ) && (
+                              <Button
+                                variant="contained"
+                                disabled={starting}
+                                onClick={() => void start(retryRequest)}
+                              >
+                                重新构建
+                              </Button>
+                            )}
+                          {step === 4 &&
+                            job &&
+                            !["queued", "running", "cleaned"].includes(
+                              job.status,
+                            ) && (
+                              <Button
+                                color="error"
+                                onClick={() => void cleanup(job)}
+                              >
+                                清理产物
+                              </Button>
+                            )}
+                          {step === 4 &&
+                            !["queued", "running"].includes(
+                              job?.status || "",
+                            ) && <Button onClick={newBuild}>新建构建</Button>}
+                        </Stack>
+                      </Stack>
+                    </Box>
                   )}
-                </div>
-                <Flex
-                  justify="space-between"
-                  align="center"
-                  className="step-footer"
-                >
-                  <Text type="secondary">
-                    {draft.device && `${draft.device} · ${draft.version}`}
-                  </Text>
-                  <Space>
-                    {step > 0 && step < 4 && (
-                      <Button onClick={() => setStep(step - 1)}>上一步</Button>
-                    )}
-                    {step < 3 && (
-                      <Button
-                        type="primary"
-                        disabled={
-                          (step === 0 && (!draft.profile || !profile)) ||
-                          (step === 1 &&
-                            (loadingPackages ||
-                              !!packageError ||
-                              packageData.length === 0))
-                        }
-                        onClick={nextStep}
-                      >
-                        下一步
-                      </Button>
-                    )}
-                    {step === 3 && (
-                      <Button
-                        type="primary"
-                        loading={starting}
-                        disabled={!env?.available}
-                        onClick={() => void start()}
-                      >
-                        开始构建
-                      </Button>
-                    )}
-                    {step === 4 &&
-                      job &&
-                      retryRequest &&
-                      ["failed", "cancelled", "interrupted"].includes(
-                        job.status,
-                      ) && (
-                        <Button
-                          type="primary"
-                          icon={<ReloadOutlined />}
-                          loading={starting}
-                          onClick={() => void start(retryRequest)}
-                        >
-                          重新构建
-                        </Button>
-                      )}
-                    {step === 4 &&
-                      job &&
-                      !["queued", "running", "cleaned"].includes(
-                        job.status,
-                      ) && (
-                        <Button
-                          danger
-                          icon={<DeleteOutlined />}
-                          onClick={() => cleanup(job)}
-                        >
-                          清理产物
-                        </Button>
-                      )}
-                    {step === 4 &&
-                      !["queued", "running"].includes(job?.status || "") && (
-                        <Button onClick={newBuild}>新建构建</Button>
-                      )}
-                  </Space>
-                </Flex>
-              </Card>
-            </>
-          )}
-          {page === "history" && (
-            <HistoryPage
-              jobs={jobs}
-              refresh={refresh}
-              statuses={statuses}
-              showJob={showJob}
-              cleanup={cleanup}
-            />
-          )}
-          {page === "sources" && (
-            <SourcesPage
-              mirrorForm={mirrorForm}
-              saveMirrors={saveMirrors}
-              savingMirrors={savingMirrors}
-            />
-          )}
-          {page === "environment" && (
-            <EnvironmentPage
-              env={env}
-              checkingEnv={checkingEnv}
-              environment={environment}
-              error={error}
-              refresh={refresh}
-            />
-          )}
-          {page === "settings" && (
-            <SettingsPage
-              ecosystem={ecosystem}
-              switchingEcosystem={switchingEcosystem}
-              changeEcosystem={changeEcosystem}
-              proxyType={proxyType}
-              setProxyType={setProxyType}
-              proxyAddress={proxyAddress}
-              setProxyAddress={setProxyAddress}
-              savingProxy={savingProxy}
-              saveProxy={saveProxy}
-              registry={registry}
-              setRegistry={setRegistry}
-              saveRegistry={saveRegistry}
-              dataDir={dataDir}
-              mirror={draft.mirror}
-              environmentName={env?.name || "未检查"}
-            />
-          )}
-        </Content>
-      </Layout>
-    </Layout>
+                  {page === "history" && (
+                    <HistoryPage
+                      jobs={jobs}
+                      refresh={refresh}
+                      statuses={statuses}
+                      showJob={showJob}
+                      cleanup={cleanup}
+                    />
+                  )}
+                  {page === "sources" && (
+                    <SourcesPage
+                      key={JSON.stringify(mirrors)}
+                      mirrors={mirrors}
+                      saveMirrors={saveMirrors}
+                      savingMirrors={savingMirrors}
+                    />
+                  )}
+                  {page === "environment" && (
+                    <EnvironmentPage
+                      env={env}
+                      checkingEnv={checkingEnv}
+                      environment={environment}
+                      error={error}
+                      refresh={refresh}
+                    />
+                  )}
+                  {page === "settings" && (
+                    <SettingsPage
+                      ecosystem={ecosystem}
+                      switchingEcosystem={switchingEcosystem}
+                      changeEcosystem={changeEcosystem}
+                      proxyType={proxyType}
+                      setProxyType={setProxyType}
+                      proxyAddress={proxyAddress}
+                      setProxyAddress={setProxyAddress}
+                      savingProxy={savingProxy}
+                      saveProxy={saveProxy}
+                      registry={registry}
+                      setRegistry={setRegistry}
+                      saveRegistry={saveRegistry}
+                      dataDir={dataDir}
+                      mirror={draft.mirror}
+                      environmentName={env?.name || "未检查"}
+                    />
+                  )}
+                </Box>
+              </Fade>
+            </Box>
+          </Box>
+        </TreasuryContent>
+      </TreasuryRoot>
+      <Snackbar
+        open={!!notice}
+        autoHideDuration={5000}
+        onClose={() => setNotice(null)}
+      >
+        {notice ? (
+          <Alert severity={notice.severity} onClose={() => setNotice(null)}>
+            {notice.text}
+          </Alert>
+        ) : undefined}
+      </Snackbar>
+      <Dialog
+        open={!!confirmation}
+        onClose={() => {
+          if (!confirmBusy) setConfirmation(null);
+        }}
+        fullWidth
+        maxWidth="sm"
+      >
+        <DialogTitle>{confirmation?.title}</DialogTitle>
+        <DialogContent>{confirmation?.detail}</DialogContent>
+        <DialogActions>
+          <Button disabled={confirmBusy} onClick={() => setConfirmation(null)}>
+            取消
+          </Button>
+          <Button
+            color="error"
+            disabled={confirmBusy}
+            onClick={async () => {
+              if (!confirmation) return;
+              setConfirmBusy(true);
+              try {
+                await confirmation.action();
+                setConfirmation(null);
+              } catch (e) {
+                error(e);
+              } finally {
+                setConfirmBusy(false);
+              }
+            }}
+          >
+            确认
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </>
   );
 }
 function Authentication() {
@@ -1150,31 +666,38 @@ function Authentication() {
     initialized: boolean;
     authenticated: boolean;
   } | null>(null);
-  const [error, setError] = useState("");
+  const [failure, setFailure] = useState("");
   const refresh = useCallback(() => {
     api<{ initialized: boolean; authenticated: boolean }>("/auth/status")
-      .then(setStatus)
+      .then((value) => {
+        setFailure("");
+        setStatus(value);
+      })
       .catch((e: unknown) =>
-        setError(e instanceof Error ? e.message : "连接失败"),
+        setFailure(e instanceof Error ? e.message : "连接失败"),
       );
   }, []);
   useEffect(() => {
     refresh();
-    const expired = () => refresh();
-    window.addEventListener("wrtkit-unauthorized", expired);
-    return () => window.removeEventListener("wrtkit-unauthorized", expired);
+    window.addEventListener("wrtkit-unauthorized", refresh);
+    return () => window.removeEventListener("wrtkit-unauthorized", refresh);
   }, [refresh]);
-  if (error)
+  if (failure)
     return (
-      <div className="login-page">
-        <Alert type="error" title={error} showIcon />
-      </div>
+      <Box sx={{ p: 3 }}>
+        <Alert
+          severity="error"
+          action={<Button onClick={refresh}>重试</Button>}
+        >
+          {failure}
+        </Alert>
+      </Box>
     );
   if (!status)
     return (
-      <div className="login-page">
-        <LoadingOutlined />
-      </div>
+      <Box sx={{ p: 4 }}>
+        <LinearProgress aria-label="加载中" />
+      </Box>
     );
   return status.authenticated ? (
     <Workspace onLogout={refresh} />
@@ -1184,19 +707,9 @@ function Authentication() {
 }
 export default function App() {
   return (
-    <ConfigProvider
-      locale={zhCN}
-      theme={{
-        token: { fontSize: 16, controlHeight: 36 },
-        components: {
-          Form: { itemMarginBottom: 18 },
-          Table: { cellPaddingBlock: 10, cellPaddingBlockMD: 8 },
-        },
-      }}
-    >
-      <AntApp>
-        <Authentication />
-      </AntApp>
-    </ConfigProvider>
+    <ThemeProvider theme={treasuryTheme}>
+      <CssBaseline />
+      <Authentication />
+    </ThemeProvider>
   );
 }

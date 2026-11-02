@@ -1,7 +1,23 @@
-import { Flex, Input, Select, Skeleton, Space, Table, Typography } from "antd";
+import {
+  Alert,
+  Box,
+  Button,
+  MenuItem,
+  Pagination,
+  Radio,
+  Skeleton,
+  Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  TextField,
+  Typography,
+} from "@mui/material";
 import type { Dispatch, SetStateAction } from "react";
 import type { Build, Device, MirrorSource, Profile } from "./types";
-const { Title, Text } = Typography;
 type Setter<T> = Dispatch<SetStateAction<T>>;
 type Props = {
   draft: Build;
@@ -18,9 +34,12 @@ type Props = {
   setQuery: Setter<string>;
   devicePage: number;
   loadingDevices: boolean;
+  loadError: string;
+  retryLoad: () => void;
   devices: Device[];
   choose: (device: Device) => void;
 };
+
 export function DeviceStep({
   draft,
   patch,
@@ -36,31 +55,44 @@ export function DeviceStep({
   setQuery,
   devicePage,
   loadingDevices,
+  loadError,
+  retryLoad,
   devices,
   choose,
 }: Props) {
-  if (!draft.mirror) {
-    return <Skeleton active paragraph={{ rows: 8 }} />;
-  }
+  if (!draft.mirror) return <Skeleton variant="rounded" height={430} />;
   return (
-    <Space orientation="vertical" size="middle" className="full">
-      <div>
-        <Title level={4}>选择设备</Title>
-        <Text type="secondary">选择系统版本，搜索设备型号或目标平台。</Text>
-      </div>
-      <Flex gap={12} wrap>
-        <Select
-          aria-label="数据源"
+    <Stack spacing={2}>
+      <Box>
+        <Typography component="h1" variant="h5">
+          选择设备
+        </Typography>
+        <Typography color="text.secondary">
+          选择版本并搜索设备型号或平台。
+        </Typography>
+      </Box>
+      {loadError && (
+        <Alert
+          severity="error"
+          action={<Button onClick={retryLoad}>重试</Button>}
+        >
+          加载设备资料失败：{loadError}
+        </Alert>
+      )}
+      <Box
+        sx={{
+          display: "grid",
+          gridTemplateColumns: { xs: "1fr", md: "1fr 180px 1fr" },
+          gap: 1.5,
+        }}
+      >
+        <TextField
+          select
+          label="软件源"
           value={draft.mirror}
-          options={mirrors.map((m) => ({
-            label: m.name,
-            value: m.url,
-            title: m.url,
-          }))}
-          className="mirror-select"
-          onChange={(m) => {
+          onChange={(e) => {
             patch({
-              mirror: m,
+              mirror: e.target.value,
               profile: "",
               target: "",
               device: "",
@@ -72,86 +104,120 @@ export function DeviceStep({
             setDevices([]);
             setDevicePage(1);
           }}
-        />
-        <Select
-          aria-label="系统版本"
-          value={deviceVersion || undefined}
-          placeholder="选择系统版本"
-          options={versions.map((v) => ({
-            label: v,
-            value: v,
-          }))}
-          className="version-select"
-          onChange={(v) => {
+        >
+          {mirrors.map((m) => (
+            <MenuItem key={m.url} value={m.url}>
+              {m.name}
+            </MenuItem>
+          ))}
+        </TextField>
+        <TextField
+          select
+          label="系统版本"
+          value={deviceVersion}
+          onChange={(e) => {
             setDevices([]);
-            setDeviceVersion(v);
-            patch({
-              version: "",
-              profile: "",
-              target: "",
-              device: "",
-            });
+            setDeviceVersion(e.target.value);
+            patch({ version: "", profile: "", target: "", device: "" });
             setProfile(null);
             setDevicePage(1);
           }}
-        />
-        <Input.Search
-          className="search-input"
-          placeholder="搜索品牌、型号或平台"
+        >
+          <MenuItem value="" disabled>
+            选择版本
+          </MenuItem>
+          {versions.map((v) => (
+            <MenuItem key={v} value={v}>
+              {v}
+            </MenuItem>
+          ))}
+        </TextField>
+        <TextField
+          label="搜索设备"
+          placeholder="品牌、型号或平台"
           value={query}
           onChange={(e) => {
             setQuery(e.target.value);
             setDevicePage(1);
           }}
-          allowClear
         />
-      </Flex>
+      </Box>
       {loadingDevices && devices.length === 0 ? (
-        <Skeleton active title={false} paragraph={{ rows: 7 }} />
+        <Skeleton variant="rounded" height={430} />
       ) : (
-        <Table<Device>
-          size="middle"
-          rowKey={(d) => d.target + "/" + d.id}
-          loading={loadingDevices}
-          dataSource={devices}
-          pagination={{
-            current: devicePage,
-            pageSize: 100,
-            showSizeChanger: false,
-            onChange: setDevicePage,
-          }}
-          scroll={{ y: 430 }}
-          rowSelection={{
-            type: "radio",
-            selectedRowKeys: draft.profile
-              ? [draft.target + "/" + draft.profile]
-              : [],
-            onChange: (_, rows) => rows[0] && choose(rows[0]),
-          }}
-          onRow={(d) => ({
-            onClick: () => choose(d),
-            style: { cursor: "pointer" },
-          })}
-          columns={[
-            {
-              title: "设备",
-              dataIndex: "title",
-              render: (v, d) => (
-                <Space orientation="vertical" size={0}>
-                  <Text>{v}</Text>
-                  <Text type="secondary">{d.id}</Text>
-                </Space>
-              ),
-            },
-            {
-              title: "目标平台",
-              dataIndex: "target",
-              width: 180,
-            },
-          ]}
-        />
+        <TableContainer sx={{ height: 430 }}>
+          <Table stickyHeader size="small" aria-label="设备列表">
+            <TableHead>
+              <TableRow>
+                <TableCell width={72}>选择</TableCell>
+                <TableCell>设备</TableCell>
+                <TableCell>目标平台</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {devices
+                .slice((devicePage - 1) * 100, devicePage * 100)
+                .map((d) => (
+                  <TableRow
+                    key={`${d.target}/${d.id}`}
+                    hover
+                    selected={
+                      draft.target === d.target && draft.profile === d.id
+                    }
+                    onClick={() => choose(d)}
+                    sx={{ cursor: "pointer" }}
+                  >
+                    <TableCell>
+                      <Radio
+                        size="small"
+                        checked={
+                          draft.target === d.target && draft.profile === d.id
+                        }
+                        onClick={(event) => event.stopPropagation()}
+                        onChange={() => choose(d)}
+                        slotProps={{
+                          input: { "aria-label": `选择 ${d.title}` },
+                        }}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <Typography>{d.title}</Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        {d.id}
+                      </Typography>
+                    </TableCell>
+                    <TableCell>{d.target}</TableCell>
+                  </TableRow>
+                ))}
+            </TableBody>
+          </Table>
+          {!devices.length && (
+            <Typography sx={{ p: 3 }} color="text.secondary">
+              {loadingDevices ? "正在加载设备…" : "没有找到设备"}
+            </Typography>
+          )}
+        </TableContainer>
       )}
-      <Text type="secondary">共 {devices.length} 个设备。</Text>
-    </Space>
+      <Stack
+        direction="row"
+        sx={{
+          alignItems: "center",
+          justifyContent: "space-between",
+          flexWrap: "wrap",
+          gap: 1,
+        }}
+      >
+        <Typography variant="body2" color="text.secondary">
+          共 {devices.length} 个设备
+        </Typography>
+        {devices.length > 100 && (
+          <Pagination
+            count={Math.ceil(devices.length / 100)}
+            page={devicePage}
+            onChange={(_, p) => setDevicePage(p)}
+          />
+        )}
+      </Stack>
+    </Stack>
   );
 }

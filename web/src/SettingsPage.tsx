@@ -1,21 +1,12 @@
 import {
+  Box,
   Button,
-  Card,
-  Descriptions,
-  Form,
-  Input,
-  Select,
-  Space,
+  Divider,
+  MenuItem,
+  Stack,
+  TextField,
   Typography,
-} from "antd";
-import {
-  CloudDownloadOutlined,
-  DatabaseOutlined,
-  GlobalOutlined,
-  PartitionOutlined,
-} from "@ant-design/icons";
-
-const { Paragraph } = Typography;
+} from "@mui/material";
 type Props = {
   ecosystem: string;
   switchingEcosystem: boolean;
@@ -51,120 +42,102 @@ export function SettingsPage({
   environmentName,
 }: Props) {
   return (
-    <>
-      <Space orientation="vertical" size="middle" className="full">
-        <Card
-          title={
-            <Space>
-              <PartitionOutlined />
-              固件生态
-            </Space>
-          }
+    <Stack spacing={3} divider={<Divider />}>
+      <Typography component="h1" variant="h5">
+        系统设置
+      </Typography>
+      <Box>
+        <Typography variant="h6">固件生态</Typography>
+        <Typography color="text.secondary" variant="body2" sx={{ mb: 2 }}>
+          切换后重新选择设备和软件。
+        </Typography>
+        <TextField
+          select
+          label="固件生态"
+          value={ecosystem}
+          disabled={switchingEcosystem}
+          onChange={(e) => changeEcosystem(e.target.value)}
+          sx={{ width: "100%", maxWidth: 520 }}
         >
-          <Select
-            className="full"
-            value={ecosystem}
-            loading={switchingEcosystem}
-            disabled={switchingEcosystem}
-            onChange={changeEcosystem}
-            options={[
-              { value: "immortalwrt", label: "ImmortalWrt" },
-              { value: "openwrt", label: "OpenWrt 官方" },
-            ]}
-          />
-        </Card>
-        <Card
-          title={
-            <Space>
-              <GlobalOutlined />
-              查询代理
-            </Space>
-          }
-        >
-          <Form layout="vertical">
-            <Form.Item label="代理类型">
-              <Select
-                value={proxyType}
-                onChange={setProxyType}
-                options={[
-                  { value: "none", label: "不使用" },
-                  { value: "http", label: "HTTP" },
-                  { value: "socks5", label: "SOCKS5" },
-                ]}
-              />
-            </Form.Item>
-            {proxyType !== "none" && (
-              <Form.Item
-                label="代理地址"
-                extra="填写地址和端口，例如 127.0.0.1:10808。"
-              >
-                <Input
-                  value={proxyAddress}
-                  onChange={(e) => setProxyAddress(e.target.value)}
-                  placeholder="127.0.0.1:10808"
-                />
-              </Form.Item>
-            )}
-            <Paragraph type="secondary">
-              用于查询版本、设备、软件索引和 Docker Hub
-              摘要；容器镜像拉取不使用此代理。
-            </Paragraph>
-            <Button type="primary" loading={savingProxy} onClick={saveProxy}>
-              保存设置
-            </Button>
-          </Form>
-        </Card>
-        <Card
-          title={
-            <Space>
-              <CloudDownloadOutlined />
-              Docker Hub 镜像加速
-            </Space>
-          }
-        >
-          <Form layout="vertical">
-            <Form.Item
-              label="镜像仓库前缀"
-              extra="可选，例如 docker.1panel.live；留空使用Docker官方仓库。"
+          <MenuItem value="immortalwrt">ImmortalWrt</MenuItem>
+          <MenuItem value="openwrt">OpenWrt 官方</MenuItem>
+        </TextField>
+      </Box>
+      <Box>
+        <Typography variant="h6">查询代理</Typography>
+        <Typography color="text.secondary" variant="body2" sx={{ mb: 2 }}>
+          用于查询版本、设备、软件索引和 Docker Hub 摘要。
+        </Typography>
+        <Stack spacing={2} sx={{ maxWidth: 520 }}>
+          <TextField
+            select
+            label="代理类型"
+            value={proxyType}
+            onChange={(e) => setProxyType(e.target.value)}
+          >
+            <MenuItem value="none">不使用</MenuItem>
+            <MenuItem value="http">HTTP</MenuItem>
+            <MenuItem value="socks5">SOCKS5</MenuItem>
+          </TextField>
+          {proxyType !== "none" && (
+            <TextField
+              label="代理地址"
+              placeholder="127.0.0.1:10808"
+              value={proxyAddress}
+              onChange={(e) => setProxyAddress(e.target.value)}
+            />
+          )}
+          <Box>
+            <Button
+              variant="contained"
+              disabled={savingProxy}
+              onClick={saveProxy}
             >
-              <Input
-                value={registry}
-                placeholder="留空使用 Docker Hub"
-                onChange={(e) => setRegistry(e.target.value)}
-              />
-            </Form.Item>
-            <Button type="primary" onClick={saveRegistry}>
-              保存设置
+              保存代理设置
             </Button>
-          </Form>
-        </Card>
-        <Card
-          title={
-            <Space>
-              <DatabaseOutlined />
-              本地数据
-            </Space>
-          }
-        >
-          <Descriptions
-            column={1}
-            items={[
-              { key: "data", label: "数据目录", children: dataDir },
-              {
-                key: "mirror",
-                label: "当前软件源",
-                children: mirror,
-              },
-              {
-                key: "env",
-                label: "构建环境",
-                children: environmentName,
-              },
-            ]}
+          </Box>
+        </Stack>
+      </Box>
+      <Box>
+        <Typography variant="h6">Docker Hub 镜像加速</Typography>
+        <Typography color="text.secondary" variant="body2" sx={{ mb: 2 }}>
+          镜像拉取使用独立的仓库前缀；留空使用 Docker Hub。
+        </Typography>
+        <Stack spacing={2} sx={{ maxWidth: 520 }}>
+          <TextField
+            label="镜像仓库前缀"
+            value={registry}
+            onChange={(e) => setRegistry(e.target.value)}
           />
-        </Card>
-      </Space>
-    </>
+          <Box>
+            <Button variant="contained" onClick={saveRegistry}>
+              保存镜像设置
+            </Button>
+          </Box>
+        </Stack>
+      </Box>
+      <Box>
+        <Typography variant="h6" sx={{ mb: 1 }}>
+          本地数据
+        </Typography>
+        {[
+          ["数据目录", dataDir],
+          ["当前软件源", mirror],
+          ["构建环境", environmentName],
+        ].map(([label, value]) => (
+          <Box
+            key={label}
+            sx={{
+              display: "grid",
+              gridTemplateColumns: "120px minmax(0, 1fr)",
+              py: 0.5,
+            }}
+          >
+            <Typography color="text.secondary">{label}</Typography>
+            <Typography sx={{ overflowWrap: "anywhere" }}>{value}</Typography>
+          </Box>
+        ))}
+      </Box>
+    </Stack>
   );
 }
-

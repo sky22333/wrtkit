@@ -28,29 +28,7 @@ WrtKit 是一个本地运行的 OpenWrt 和 ImmortalWrt 固件可视化构建工
 
 ## 界面预览
 
-以下截图使用演示数据。
-
-<table>
-  <tr>
-    <td><strong>选择设备</strong><br><img src=".github/demo/02-选择设备.png" alt="选择设备" width="700"></td>
-    <td><strong>选择软件</strong><br><img src=".github/demo/03-选择软件.png" alt="选择软件" width="700"></td>
-  </tr>
-  <tr>
-    <td><strong>配置固件</strong><br><img src=".github/demo/04-配置固件.png" alt="配置固件" width="700"></td>
-    <td><strong>确认构建</strong><br><img src=".github/demo/05-确认构建.png" alt="确认构建" width="700"></td>
-  </tr>
-  <tr>
-    <td><strong>构建结果</strong><br><img src=".github/demo/06-构建结果.png" alt="构建结果" width="700"></td>
-    <td><strong>构建记录</strong><br><img src=".github/demo/07-构建记录.png" alt="构建记录" width="700"></td>
-  </tr>
-  <tr>
-    <td><strong>软件源站</strong><br><img src=".github/demo/08-软件源站.png" alt="软件源站" width="700"></td>
-    <td><strong>构建环境</strong><br><img src=".github/demo/09-构建环境.png" alt="构建环境" width="700"></td>
-  </tr>
-  <tr>
-    <td colspan="2"><strong>系统设置</strong><br><img src=".github/demo/10-系统设置.png" alt="系统设置" width="700"></td>
-  </tr>
-</table>
+![WrtKit 设备选择界面](.github/demo/demo.png)
 
 ## 从源码构建
 

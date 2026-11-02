@@ -1,110 +1,121 @@
-import { Button, Card, Form, Input, Tooltip, Typography } from "antd";
-import type { FormInstance } from "antd";
-import { DeleteOutlined, PlusOutlined } from "@ant-design/icons";
+import { useState, type FormEvent } from "react";
+import {
+  Alert,
+  Box,
+  Button,
+  IconButton,
+  Stack,
+  TextField,
+  Tooltip,
+  Typography,
+} from "@mui/material";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlined";
+import AddIcon from "@mui/icons-material/Add";
 import type { MirrorSource } from "./types";
-const { Text } = Typography;
 type Props = {
-  mirrorForm: FormInstance<{ mirrors: MirrorSource[] }>;
+  mirrors: MirrorSource[];
   saveMirrors: (values: { mirrors: MirrorSource[] }) => void;
   savingMirrors: boolean;
 };
-export function SourcesPage({ mirrorForm, saveMirrors, savingMirrors }: Props) {
+export function SourcesPage({ mirrors, saveMirrors, savingMirrors }: Props) {
+  const [items, setItems] = useState(mirrors);
+  const [error, setError] = useState("");
+  const update = (i: number, patch: Partial<MirrorSource>) =>
+    setItems((old) => old.map((v, n) => (n === i ? { ...v, ...patch } : v)));
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    if (!items.length || items.length > 32) {
+      setError("请保留 1–32 个软件源");
+      return;
+    }
+    for (const item of items) {
+      if (!item.name.trim() || item.name.length > 80) {
+        setError("请填写不超过 80 个字符的名称");
+        return;
+      }
+      try {
+        if (new URL(item.url).protocol !== "https:") throw Error();
+      } catch {
+        setError("请输入有效的 HTTPS 软件源地址");
+        return;
+      }
+    }
+    setError("");
+    saveMirrors({ mirrors: items });
+  };
   return (
-    <>
-      <Card
-        title="软件源列表"
-        extra={<Text type="secondary">第一项为默认源</Text>}
-      >
-        <Form form={mirrorForm} layout="vertical" onFinish={saveMirrors}>
-          <Form.List
-            name="mirrors"
-            rules={[
-              {
-                validator: async (_, list: MirrorSource[]) => {
-                  if (!list?.length) throw new Error("请至少保留一个软件源");
-                  if (list.length > 32) throw new Error("最多添加 32 个软件源");
-                },
-              },
-            ]}
+    <Stack component="form" onSubmit={submit} spacing={2}>
+      <Box>
+        <Typography component="h1" variant="h5">
+          软件源列表
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
+          第一项为默认源。
+        </Typography>
+      </Box>
+      {error && <Alert severity="error">{error}</Alert>}
+      {items.map((item, i) => (
+        <Box
+          key={i}
+          sx={{
+            display: "grid",
+            gridTemplateColumns: {
+              xs: "minmax(0, 1fr) auto",
+              sm: "minmax(0, 1fr) minmax(0, 2fr) auto",
+            },
+            gap: 1.5,
+            alignItems: "end",
+          }}
+        >
+          <TextField
+            label={`镜像名称 ${i + 1}`}
+            value={item.name}
+            onChange={(e) => update(i, { name: e.target.value })}
+          />
+          <TextField
+            label={`HTTPS 地址 ${i + 1}`}
+            value={item.url}
+            onChange={(e) => update(i, { url: e.target.value })}
+            sx={{
+              gridColumn: { xs: "1", sm: "2" },
+              gridRow: { xs: "2", sm: "1" },
+            }}
+          />
+          <Box
+            sx={{
+              gridColumn: { xs: "2", sm: "3" },
+              gridRow: "1",
+              alignSelf: "end",
+            }}
           >
-            {(fields, { add, remove }, { errors }) => (
-              <>
-                <div className="mirror-list-header">
-                  <span>镜像名称</span>
-                  <span>HTTPS 地址</span>
-                  <span />
-                </div>
-                {fields.map(({ key, name, ...rest }) => (
-                  <div className="mirror-row" key={key}>
-                    <Form.Item
-                      {...rest}
-                      name={[name, "name"]}
-                      rules={[
-                        {
-                          required: true,
-                          whitespace: true,
-                          message: "请填写名称",
-                        },
-                        { max: 80 },
-                      ]}
-                    >
-                      <Input
-                        aria-label="镜像名称"
-                        placeholder="例如 南京大学"
-                        maxLength={80}
-                      />
-                    </Form.Item>
-                    <Form.Item
-                      {...rest}
-                      name={[name, "url"]}
-                      rules={[
-                        {
-                          required: true,
-                          whitespace: true,
-                          message: "请填写地址",
-                        },
-                        { type: "url", message: "请输入有效地址" },
-                        {
-                          pattern: /^https:\/\//,
-                          message: "请使用 HTTPS",
-                        },
-                      ]}
-                    >
-                      <Input
-                        aria-label="镜像地址"
-                        placeholder="https://example.com/openwrt"
-                      />
-                    </Form.Item>
-                    <Tooltip title="删除">
-                      <Button
-                        aria-label="删除软件源"
-                        type="text"
-                        danger
-                        icon={<DeleteOutlined />}
-                        disabled={fields.length === 1}
-                        onClick={() => remove(name)}
-                      />
-                    </Tooltip>
-                  </div>
-                ))}
-                <Form.ErrorList errors={errors} />
-                <Button
-                  icon={<PlusOutlined />}
-                  onClick={() => add({ name: "", url: "" })}
-                  disabled={fields.length >= 32}
+            <Tooltip title="删除软件源">
+              <span>
+                <IconButton
+                  aria-label={`删除软件源 ${item.name || i + 1}`}
+                  disabled={items.length === 1}
+                  onClick={() =>
+                    setItems((old) => old.filter((_, n) => n !== i))
+                  }
                 >
-                  添加软件源
-                </Button>
-              </>
-            )}
-          </Form.List>
-          <div className="mirror-actions">
-            <Button type="primary" htmlType="submit" loading={savingMirrors}>
-              保存设置
-            </Button>
-          </div>
-        </Form>
-      </Card>
-    </>
+                  <DeleteOutlineIcon />
+                </IconButton>
+              </span>
+            </Tooltip>
+          </Box>
+        </Box>
+      ))}
+      <Stack direction="row" spacing={1}>
+        <Button
+          startIcon={<AddIcon />}
+          disabled={items.length >= 32}
+          onClick={() => setItems((old) => [...old, { name: "", url: "" }])}
+        >
+          添加软件源
+        </Button>
+        <Button type="submit" variant="contained" disabled={savingMirrors}>
+          保存设置
+        </Button>
+      </Stack>
+    </Stack>
   );
 }

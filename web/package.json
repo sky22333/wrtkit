@@ -12,8 +12,10 @@
     "format": "prettier --write src tests"
   },
   "dependencies": {
-    "@ant-design/icons": "^6.3.4",
-    "antd": "^6.6.8",
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
+    "@mui/icons-material": "^9.5.0",
+    "@mui/material": "^9.5.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"
   },

@@ -1,26 +1,26 @@
+import { useState, type Dispatch, type SetStateAction } from "react";
 import {
   Alert,
+  Box,
   Button,
-  Card,
   Checkbox,
-  Flex,
-  Input,
+  Chip,
+  Pagination,
   Skeleton,
-  Space,
+  Stack,
+  Tab,
   Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
   Tabs,
-  Tag,
+  TextField,
   Tooltip,
   Typography,
-} from "antd";
-import {
-  CheckSquareOutlined,
-  AppstoreOutlined,
-  PlusOutlined,
-} from "@ant-design/icons";
-import type { Dispatch, SetStateAction } from "react";
+} from "@mui/material";
 import type { Build, Package } from "./types";
-const { Title, Text } = Typography;
 type Props = {
   draft: Build;
   packageWarnings: string[];
@@ -61,186 +61,190 @@ export function PackagesStep({
   categorizedPackages,
   additionalCount,
 }: Props) {
+  const [page, setPage] = useState(1);
   if (loadingPackages)
     return (
-      <Space orientation="vertical" className="full" size="large">
-        <Skeleton active paragraph={{ rows: 2 }} />
-        <Skeleton active paragraph={{ rows: 8 }} />
-      </Space>
+      <Stack spacing={2}>
+        <Skeleton height={80} />
+        <Skeleton variant="rounded" height={430} />
+      </Stack>
     );
   if (packageError)
     return (
       <Alert
-        type="error"
-        showIcon
-        title="软件包目录加载失败"
-        description={packageError}
+        severity="error"
         action={<Button onClick={retryPackages}>重试</Button>}
-      />
-    );
-  return (
-    <Space orientation="vertical" size="middle" className="full">
-      <div>
-        <Title level={4}>选择软件</Title>
-        <Text type="secondary">
-          软件目录来自当前镜像站，软件依赖由 ImageBuilder 处理。
-        </Text>
-      </div>
-      {packageWarnings.length > 0 && (
-        <Alert
-          type="warning"
-          showIcon
-          title="部分软件源索引不可用"
-          description={packageWarnings.join("；")}
-        />
-      )}
-      <Card
-        size="small"
-        title={
-          <Space>
-            <CheckSquareOutlined />
-            已选择的软件包
-          </Space>
-        }
-        extra={<Text type="secondary">{selectedPackages.length} 项</Text>}
       >
-        <Text type="secondary">
-          浅色为设备内置包；中文翻译随所选软件自动匹配。
-        </Text>
-        <div className="selected-packages">
+        软件包目录加载失败：{packageError}
+      </Alert>
+    );
+  const selected = new Set(selectedPackages);
+  const currentPage = Math.min(
+    page,
+    Math.max(1, Math.ceil(categorizedPackages.length / 20)),
+  );
+  return (
+    <Stack spacing={2}>
+      <Box>
+        <Typography component="h1" variant="h5">
+          选择软件
+        </Typography>
+        <Typography color="text.secondary">
+          从所选软件源选择软件，依赖由构建环境处理。
+        </Typography>
+      </Box>
+      {packageWarnings.length > 0 && (
+        <Alert severity="warning">
+          部分软件源索引不可用：{packageWarnings.join("；")}
+        </Alert>
+      )}
+      <Box>
+        <Typography variant="subtitle1">
+          已选择 {selectedPackages.length} 项
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
+          设备内置包与自动匹配的中文翻译会一并展示。
+        </Typography>
+        <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.75, mt: 1 }}>
           {selectedPackages.map((name) => (
             <Tooltip
               key={name}
               title={
                 defaultSet.has(name)
-                  ? "设备清单中的默认软件包"
+                  ? "设备内置"
                   : automaticTranslations.has(name)
-                    ? "由已选软件自动匹配"
-                    : undefined
+                    ? "自动匹配中文"
+                    : name
               }
             >
-              <Tag
-                className={defaultSet.has(name) ? "builtin-package" : undefined}
-                closable={!automaticTranslations.has(name)}
-                onClose={(e) => {
-                  e.preventDefault();
-                  selectPackage(name, false);
-                }}
-              >
-                {name}
-              </Tag>
+              <Chip
+                size="small"
+                label={name}
+                variant={defaultSet.has(name) ? "outlined" : "filled"}
+                onDelete={
+                  automaticTranslations.has(name)
+                    ? undefined
+                    : () => selectPackage(name, false)
+                }
+              />
             </Tooltip>
           ))}
-        </div>
-        {draft.remove.length > 0 && (
-          <div className="removed-packages">
-            <Text type="secondary">已移除的内置包，点击恢复：</Text>
-            <Flex wrap gap={6}>
-              {draft.remove.map((name) => (
-                <Button
-                  key={name}
-                  size="small"
-                  icon={<PlusOutlined />}
-                  onClick={() => toggleDefault(name, false)}
-                >
-                  {name}
-                </Button>
-              ))}
-            </Flex>
-          </div>
-        )}
-      </Card>
-      <Card
-        size="small"
-        title={
-          <Space>
-            <AppstoreOutlined />
-            软件包目录
-          </Space>
-        }
-      >
-        <Space orientation="vertical" className="full" size="middle">
-          <Text type="secondary">
-            软件来自所选设备的软件源，自动安装中文版本；依赖由构建环境解析。
-          </Text>
-          {draft.theme &&
-            packageData.length > 0 &&
-            !availableNames.has(draft.theme) && (
-              <Alert
-                type="warning"
-                showIcon
-                title="当前镜像没有所选主题，请在已选软件包中取消或更换。"
+        </Box>
+      </Box>
+      {draft.remove.length > 0 && (
+        <Box>
+          <Typography variant="body2" color="text.secondary">
+            已移除的内置包，点击恢复：
+          </Typography>
+          <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.75, mt: 1 }}>
+            {draft.remove.map((name) => (
+              <Chip
+                key={name}
+                size="small"
+                label={name}
+                onClick={() => toggleDefault(name, false)}
               />
-            )}
-          <Tabs
-            activeKey={packageFeed}
-            onChange={setPackageFeed}
-            items={[
-              { key: "all", label: "全部" },
-              { key: "luci", label: "LuCI 界面" },
-              { key: "themes", label: "主题" },
-              { key: "proxy", label: "代理工具" },
-            ]}
-          />
-          <Input.Search
-            placeholder="搜索当前分类的软件包"
-            value={packageSearch}
-            onChange={(e) => setPackageSearch(e.target.value)}
-            allowClear
-          />
-          <Table<Package>
-            size="middle"
-            loading={loadingPackages}
-            rowKey={(p) => p.feed + "/" + p.name}
-            dataSource={categorizedPackages}
-            pagination={{
-              pageSize: 10,
-              showSizeChanger: false,
-              showTotal: (n) => `共 ${n} 项`,
-            }}
-            columns={[
-              {
-                title: "选择",
-                width: 65,
-                render: (_, p) => (
-                  <Checkbox
-                    aria-label={"选择 " + p.name}
-                    disabled={automaticTranslations.has(p.name)}
-                    checked={selectedPackages.includes(p.name)}
-                    onChange={(e) => selectPackage(p.name, e.target.checked)}
-                  />
-                ),
-              },
-              {
-                title: "软件包",
-                dataIndex: "name",
-                render: (name: string) => (
-                  <Space>
-                    {name}
-                    {defaultSet.has(name) && !draft.remove.includes(name) && (
-                      <Tag>设备内置</Tag>
+            ))}
+          </Box>
+        </Box>
+      )}
+      {draft.theme &&
+        packageData.length > 0 &&
+        !availableNames.has(draft.theme) && (
+          <Alert severity="warning">
+            当前软件源没有所选主题，请取消或更换。
+          </Alert>
+        )}
+      <Tabs
+        value={packageFeed}
+        onChange={(_, value: string) => {
+          setPackageFeed(value);
+          setPage(1);
+        }}
+        variant="scrollable"
+        scrollButtons="auto"
+        aria-label="软件分类"
+      >
+        <Tab value="all" label="全部" />
+        <Tab value="luci" label="LuCI 界面" />
+        <Tab value="themes" label="主题" />
+        <Tab value="proxy" label="代理工具" />
+      </Tabs>
+      <TextField
+        label="搜索软件包"
+        value={packageSearch}
+        onChange={(e) => {
+          setPackageSearch(e.target.value);
+          setPage(1);
+        }}
+      />
+      <TableContainer>
+        <Table size="small" aria-label="软件包目录">
+          <TableHead>
+            <TableRow>
+              <TableCell>选择</TableCell>
+              <TableCell>软件包</TableCell>
+              <TableCell>版本</TableCell>
+              <TableCell>软件源</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {categorizedPackages
+              .slice((currentPage - 1) * 20, currentPage * 20)
+              .map((p) => (
+                <TableRow key={`${p.feed}/${p.name}`}>
+                  <TableCell>
+                    <Checkbox
+                      size="small"
+                      checked={selected.has(p.name)}
+                      disabled={automaticTranslations.has(p.name)}
+                      onChange={(e) => selectPackage(p.name, e.target.checked)}
+                      slotProps={{ input: { "aria-label": `选择 ${p.name}` } }}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    {p.name}{" "}
+                    {defaultSet.has(p.name) &&
+                      !draft.remove.includes(p.name) && (
+                        <Chip size="small" label="设备内置" />
+                      )}{" "}
+                    {automaticTranslations.has(p.name) && (
+                      <Chip size="small" label="自动匹配中文" />
                     )}
-                    {automaticTranslations.has(name) && <Tag>自动匹配中文</Tag>}
-                  </Space>
-                ),
-              },
-              {
-                title: "版本",
-                dataIndex: "version",
-                width: 240,
-              },
-              {
-                title: "软件源",
-                dataIndex: "feed",
-                width: 100,
-              },
-            ]}
+                  </TableCell>
+                  <TableCell>{p.version}</TableCell>
+                  <TableCell>{p.feed}</TableCell>
+                </TableRow>
+              ))}
+          </TableBody>
+        </Table>
+        {categorizedPackages.length === 0 && (
+          <Typography sx={{ p: 3 }} color="text.secondary">
+            没有找到软件包
+          </Typography>
+        )}
+      </TableContainer>
+      <Stack
+        direction="row"
+        sx={{
+          justifyContent: "space-between",
+          alignItems: "center",
+          flexWrap: "wrap",
+          gap: 1,
+        }}
+      >
+        <Typography variant="body2" color="text.secondary">
+          共 {categorizedPackages.length} 项 · 新增 {additionalCount} 项，移除{" "}
+          {draft.remove.length} 项
+        </Typography>
+        {categorizedPackages.length > 20 && (
+          <Pagination
+            count={Math.ceil(categorizedPackages.length / 20)}
+            page={currentPage}
+            onChange={(_, value) => setPage(value)}
           />
-        </Space>
-      </Card>
-      <Text>
-        新增 {additionalCount} 项，移除 {draft.remove.length} 项
-      </Text>
-    </Space>
+        )}
+      </Stack>
+    </Stack>
   );
 }

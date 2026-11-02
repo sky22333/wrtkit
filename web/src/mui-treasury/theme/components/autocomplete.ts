@@ -1,0 +1,161 @@
+import { autocompleteClasses } from '@mui/material/Autocomplete';
+import { chipClasses } from '@mui/material/Chip';
+import { filledInputClasses } from '@mui/material/FilledInput';
+import { inputBaseClasses } from '@mui/material/InputBase';
+
+import {
+  CONTROL_HEIGHTS,
+  CONTROL_TOUCH_HEIGHTS,
+  TOUCH_MEDIA_QUERY,
+} from '../scales';
+import type { ThemeComponents } from '../types';
+
+declare module '@mui/material/Autocomplete' {
+  interface AutocompletePropsSizeOverrides {
+    large: true;
+  }
+}
+
+export const autocompleteTheme: ThemeComponents = {
+  MuiAutocomplete: {
+    defaultProps: {
+      slotProps: {
+        paper: {
+          elevation: 8,
+        },
+      },
+    },
+    styleOverrides: {
+      root: {
+        variants: [
+          {
+            props: { size: 'medium' },
+            style: {
+              [`& .${autocompleteClasses.inputRoot}`]: {
+                paddingTop: 2,
+                paddingBottom: 2,
+                paddingRight: 40,
+                [`&:has(.${chipClasses.root})`]: {
+                  paddingLeft: '2px',
+                },
+                [`&.${filledInputClasses.root}`]: {
+                  paddingTop: 17.5,
+                  paddingBottom: 0.5,
+                  [TOUCH_MEDIA_QUERY]: {
+                    paddingTop: 19,
+                    paddingBottom: 2,
+                  },
+                },
+                [`& .${autocompleteClasses.input}`]: {
+                  paddingBlock: CONTROL_HEIGHTS.md / 2 - 12.5,
+                  ...(CONTROL_HEIGHTS.md !== CONTROL_TOUCH_HEIGHTS.md && {
+                    [TOUCH_MEDIA_QUERY]: {
+                      paddingBlock: CONTROL_TOUCH_HEIGHTS.md / 2 - 14,
+                    },
+                  }),
+                },
+              },
+            },
+          },
+          {
+            props: { size: 'small' },
+            style: {
+              [`& .${autocompleteClasses.inputRoot}.${inputBaseClasses.sizeSmall}`]:
+                {
+                  paddingTop: 2,
+                  paddingBottom: 2,
+                  paddingLeft: 2,
+                  [`&.${filledInputClasses.root}`]: {
+                    paddingTop: 16.5,
+                    paddingBottom: 0,
+                    paddingLeft: 8,
+                    [TOUCH_MEDIA_QUERY]: {
+                      paddingTop: 18,
+                      paddingBottom: 1,
+                    },
+                  },
+                  [`& .${autocompleteClasses.input}`]: {
+                    paddingBlock: CONTROL_HEIGHTS.sm / 2 - 12.5,
+                    ...(CONTROL_HEIGHTS.sm !== CONTROL_TOUCH_HEIGHTS.sm && {
+                      [TOUCH_MEDIA_QUERY]: {
+                        paddingBlock: CONTROL_TOUCH_HEIGHTS.sm / 2 - 14,
+                      },
+                    }),
+                  },
+                },
+            },
+          },
+          {
+            props: { size: 'large' },
+            style: {
+              [`& .${autocompleteClasses.inputRoot}`]: {
+                paddingTop: 4,
+                paddingBottom: 4,
+                paddingLeft: 12,
+                [`&:has(.${chipClasses.root})`]: {
+                  paddingLeft: 4,
+                },
+                [`& .${autocompleteClasses.input}`]: {
+                  paddingBlock: CONTROL_HEIGHTS.lg / 2 - 14.5,
+                  ...(CONTROL_HEIGHTS.lg !== CONTROL_TOUCH_HEIGHTS.lg && {
+                    [TOUCH_MEDIA_QUERY]: {
+                      paddingBlock: CONTROL_TOUCH_HEIGHTS.lg / 2 - 16,
+                    },
+                  }),
+                },
+              },
+            },
+          },
+        ],
+      },
+      tag: {
+        margin: 2,
+      },
+      option: ({ theme }) => ({
+        fontSize: theme.typography.body2.fontSize,
+        padding: '6px',
+        borderRadius: 4,
+      }),
+      paper: ({ theme }) => ({
+        marginTop: 4,
+        borderRadius: 8,
+        border: `1px solid ${(theme.vars || theme).palette.divider}`,
+      }),
+      listbox: ({ theme }) => ({
+        padding: '6px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '4px',
+        [`& .${autocompleteClasses.option}`]: {
+          flexShrink: 0,
+          minHeight: 40,
+          [theme.breakpoints.up('sm')]: {
+            minHeight: 'auto',
+          },
+        },
+      }),
+      noOptions: ({ theme }) => ({
+        fontSize: theme.typography.body2.fontSize,
+        color: (theme.vars || theme).palette.text.secondary,
+      }),
+      loading: ({ theme }) => ({
+        fontSize: theme.typography.body2.fontSize,
+        color: (theme.vars || theme).palette.text.secondary,
+      }),
+      clearIndicator: {
+        borderRadius: 4,
+      },
+      popupIndicator: {
+        borderRadius: 4,
+        variants: [
+          {
+            props: { size: 'small' },
+            style: {
+              marginRight: -5,
+            },
+          },
+        ],
+      },
+    },
+  },
+};

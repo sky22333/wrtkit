@@ -1,6 +1,6 @@
-import { Alert, Descriptions, Space, Typography } from "antd";
+import { Alert, Box, Divider, Stack, Typography } from "@mui/material";
 import type { Build, Environment } from "./types";
-const { Title } = Typography;
+
 type Props = {
   draft: Build;
   additionalCount: number;
@@ -8,6 +8,7 @@ type Props = {
   pppSupported: boolean;
   env: Environment | null;
 };
+
 export function ReviewStep({
   draft,
   additionalCount,
@@ -15,91 +16,57 @@ export function ReviewStep({
   pppSupported,
   env,
 }: Props) {
+  const rows = [
+    ["设备", draft.device],
+    ["目标平台", `${draft.target} / ${draft.profile}`],
+    ["系统版本", draft.version],
+    ["软件包", `新增 ${additionalCount} 项，移除 ${draft.remove.length} 项`],
+    ["LuCI 主题", draft.theme || "固件默认"],
+    ["根分区", draft.rootfs_size ? `${draft.rootfs_size} MiB` : "固件默认"],
+    ...(wirelessSupported ? [["无线网络", draft.wifi_ssid || "默认"]] : []),
+    ...(pppSupported
+      ? [["PPPoE", draft.ppp_username ? "已配置" : "默认"]]
+      : []),
+    ["管理地址", draft.address || "默认"],
+    ["初始化脚本", draft.script ? "已填写" : "未填写"],
+    ["构建及固件默认软件源", draft.mirror],
+  ];
   return (
-    <Space orientation="vertical" size="middle" className="full">
-      <Title level={4}>确认构建</Title>
-      <Descriptions
-        bordered
-        size="middle"
-        column={1}
-        items={[
-          {
-            key: "device",
-            label: "设备",
-            children: draft.device,
-          },
-          {
-            key: "target",
-            label: "目标平台",
-            children: `${draft.target} / ${draft.profile}`,
-          },
-          {
-            key: "version",
-            label: "系统版本",
-            children: draft.version,
-          },
-          {
-            key: "packages",
-            label: "软件包",
-            children: `新增 ${additionalCount} 项，移除 ${draft.remove.length} 项`,
-          },
-          {
-            key: "theme",
-            label: "LuCI 主题",
-            children: draft.theme || "固件默认",
-          },
-          {
-            key: "rootfs",
-            label: "根分区",
-            children: draft.rootfs_size
-              ? `${draft.rootfs_size} MiB`
-              : "固件默认",
-          },
-          ...(wirelessSupported
-            ? [
-                {
-                  key: "wifi",
-                  label: "无线网络",
-                  children: draft.wifi_ssid || "默认",
-                },
-              ]
-            : []),
-          ...(pppSupported
-            ? [
-                {
-                  key: "ppp",
-                  label: "PPPoE",
-                  children: draft.ppp_username ? "已配置" : "默认",
-                },
-              ]
-            : []),
-          {
-            key: "address",
-            label: "管理地址",
-            children: draft.address || "默认",
-          },
-          {
-            key: "script",
-            label: "初始化脚本",
-            children: draft.script ? "已填写" : "未填写",
-          },
-          {
-            key: "mirror",
-            label: "构建及固件默认软件源",
-            children: draft.mirror,
-          },
-        ]}
-      />
+    <Stack spacing={2}>
+      <Typography component="h1" variant="h5">
+        确认构建
+      </Typography>
+      <Box component="dl" sx={{ m: 0 }}>
+        {rows.map(([label, value], i) => (
+          <Box key={label}>
+            <Box
+              sx={{
+                display: "grid",
+                gridTemplateColumns: { xs: "1fr", sm: "180px 1fr" },
+                gap: 1,
+                py: 1.5,
+              }}
+            >
+              <Typography component="dt" color="text.secondary">
+                {label}
+              </Typography>
+              <Typography
+                component="dd"
+                sx={{ m: 0, overflowWrap: "anywhere" }}
+              >
+                {value}
+              </Typography>
+            </Box>
+            {i < rows.length - 1 && <Divider />}
+          </Box>
+        ))}
+      </Box>
       {draft.mirror === "https://downloads.immortalwrt.org" && (
-        <Alert
-          type="warning"
-          showIcon
-          title="当前选择的是 ImmortalWrt 官方服务器"
-        />
+        <Alert severity="warning">当前选择的是 ImmortalWrt 官方服务器</Alert>
       )}
       {!env?.available && (
-        <Alert type="warning" showIcon title="构建环境不可用，请先检查。" />
+        <Alert severity="warning">构建环境不可用，请先检查。</Alert>
       )}
-    </Space>
+    </Stack>
   );
 }
