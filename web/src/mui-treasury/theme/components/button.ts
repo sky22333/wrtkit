@@ -3,7 +3,6 @@ import {
   buttonBaseClasses,
   touchRippleClasses,
 } from '@mui/material/ButtonBase';
-import { fabClasses } from '@mui/material/Fab';
 
 import {
   CONTROL_HEIGHTS,
@@ -350,61 +349,6 @@ export const buttonTheme: ThemeComponents = {
           },
         ],
       }),
-    },
-  },
-  MuiFab: {
-    styleOverrides: {
-      root: ({ theme }) => ({
-        [`&.${fabClasses.focusVisible}`]: {
-          outline: '2px solid',
-          outlineColor: (theme.vars || theme).palette.text.primary,
-          outlineOffset: '2px',
-        },
-        '&:active': {
-          transform: 'scale(0.98)',
-        },
-      }),
-    },
-  },
-  MuiToggleButton: {
-    styleOverrides: {
-      root: {
-        variants: [
-          {
-            props: { size: 'small' },
-            style: {
-              padding: CONTROL_HEIGHTS.sm / 2 - 11,
-              ...(CONTROL_HEIGHTS.sm !== CONTROL_TOUCH_HEIGHTS.sm && {
-                [TOUCH_MEDIA_QUERY]: {
-                  padding: CONTROL_TOUCH_HEIGHTS.sm / 2 - 11,
-                },
-              }),
-            },
-          },
-          {
-            props: { size: 'medium' },
-            style: {
-              padding: CONTROL_HEIGHTS.md / 2 - 11,
-              ...(CONTROL_HEIGHTS.md !== CONTROL_TOUCH_HEIGHTS.md && {
-                [TOUCH_MEDIA_QUERY]: {
-                  padding: CONTROL_TOUCH_HEIGHTS.md / 2 - 11,
-                },
-              }),
-            },
-          },
-          {
-            props: { size: 'large' },
-            style: {
-              padding: CONTROL_HEIGHTS.lg / 2 - 11,
-              ...(CONTROL_HEIGHTS.lg !== CONTROL_TOUCH_HEIGHTS.lg && {
-                [TOUCH_MEDIA_QUERY]: {
-                  padding: CONTROL_TOUCH_HEIGHTS.lg / 2 - 11,
-                },
-              }),
-            },
-          },
-        ],
-      },
     },
   },
 };

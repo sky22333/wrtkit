@@ -1,4 +1,3 @@
-import { filledInputClasses } from '@mui/material/FilledInput';
 import { inputBaseClasses } from '@mui/material/InputBase';
 import { outlinedInputClasses } from '@mui/material/OutlinedInput';
 import { selectClasses } from '@mui/material/Select';
@@ -42,28 +41,6 @@ export const selectTheme: ThemeComponents = {
             ...(CONTROL_HEIGHTS.sm !== CONTROL_TOUCH_HEIGHTS.sm && {
               [TOUCH_MEDIA_QUERY]: {
                 paddingBlock: CONTROL_TOUCH_HEIGHTS.sm / 2 - 11.5,
-              },
-            }),
-          },
-        },
-        [`&.${filledInputClasses.input}`]: {
-          paddingTop: CONTROL_HEIGHTS.md / 2 + 5,
-          paddingInline: 12,
-          paddingBottom: CONTROL_HEIGHTS.md / 2 - 12,
-          ...(CONTROL_HEIGHTS.md !== CONTROL_TOUCH_HEIGHTS.md && {
-            [TOUCH_MEDIA_QUERY]: {
-              paddingTop: CONTROL_TOUCH_HEIGHTS.md / 2 + 5,
-              paddingBottom: CONTROL_TOUCH_HEIGHTS.md / 2 - 12,
-            },
-          }),
-          [`.${inputBaseClasses.sizeSmall} > &`]: {
-            paddingTop: CONTROL_HEIGHTS.sm / 2 + 4,
-            paddingInline: 10,
-            paddingBottom: CONTROL_HEIGHTS.sm / 2 - 13,
-            ...(CONTROL_HEIGHTS.sm !== CONTROL_TOUCH_HEIGHTS.sm && {
-              [TOUCH_MEDIA_QUERY]: {
-                paddingTop: CONTROL_TOUCH_HEIGHTS.sm / 2 + 4,
-                paddingBottom: CONTROL_TOUCH_HEIGHTS.sm / 2 - 13,
               },
             }),
           },

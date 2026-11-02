@@ -1,8 +1,6 @@
-import { filledInputClasses } from '@mui/material/FilledInput';
 import { formHelperTextClasses } from '@mui/material/FormHelperText';
 import { formLabelClasses } from '@mui/material/FormLabel';
 import { iconButtonClasses } from '@mui/material/IconButton';
-import { inputClasses } from '@mui/material/Input';
 import { inputAdornmentClasses } from '@mui/material/InputAdornment';
 import { inputBaseClasses } from '@mui/material/InputBase';
 import { inputLabelClasses } from '@mui/material/InputLabel';
@@ -278,100 +276,6 @@ export const textFieldTheme: ThemeComponents = {
       },
     },
   },
-  MuiFilledInput: {
-    styleOverrides: {
-      root: ({ theme }) => ({
-        backgroundColor: (theme.vars || theme).palette.action.hover,
-        borderRadius: '8px 8px 0 0',
-        '&:hover': {
-          backgroundColor: (theme.vars || theme).palette.action.selected,
-        },
-        [`&.${filledInputClasses.focused}`]: {
-          backgroundColor: (theme.vars || theme).palette.action.selected,
-        },
-        [`&.${filledInputClasses.disabled}`]: {
-          backgroundColor: (theme.vars || theme).palette.action
-            .disabledBackground,
-        },
-        '&::before': {
-          transition: theme.transitions.create(['border-bottom-color'], {
-            duration: theme.transitions.duration.shorter,
-          }),
-        },
-        '&:hover::before': {
-          borderBottom: `2px solid ${
-            (theme.vars || theme).palette.text.primary
-          }`,
-        },
-        '&::after': {
-          borderBottom: `2px solid ${
-            (theme.vars || theme).palette.primary.main
-          }`,
-        },
-        [`&.${filledInputClasses.error}::after`]: {
-          borderBottomColor: (theme.vars || theme).palette.error.main,
-        },
-      }),
-      input: () => ({
-        '&:where(input)': {
-          paddingTop: CONTROL_HEIGHTS.md / 2 + 5,
-          paddingInline: 12,
-          paddingBottom: CONTROL_HEIGHTS.md / 2 - 12,
-          ...(CONTROL_HEIGHTS.md !== CONTROL_TOUCH_HEIGHTS.md && {
-            [TOUCH_MEDIA_QUERY]: {
-              paddingTop: CONTROL_TOUCH_HEIGHTS.md / 2 + 5,
-              paddingBottom: CONTROL_TOUCH_HEIGHTS.md / 2 - 12,
-            },
-          }),
-        },
-        variants: [
-          {
-            props: { size: 'small' },
-            style: {
-              '&:where(input)': {
-                paddingTop: CONTROL_HEIGHTS.sm / 2 + 4,
-                paddingInline: 10,
-                paddingBottom: CONTROL_HEIGHTS.sm / 2 - 13,
-                ...(CONTROL_HEIGHTS.sm !== CONTROL_TOUCH_HEIGHTS.sm && {
-                  [TOUCH_MEDIA_QUERY]: {
-                    paddingTop: CONTROL_TOUCH_HEIGHTS.sm / 2 + 4,
-                    paddingBottom: CONTROL_TOUCH_HEIGHTS.sm / 2 - 13,
-                  },
-                }),
-              },
-            },
-          },
-        ],
-      }),
-    },
-  },
-  MuiInput: {
-    styleOverrides: {
-      root: ({ theme }) => ({
-        '&::before': {
-          transition: theme.transitions.create(['border-bottom-color'], {
-            duration: theme.transitions.duration.shorter,
-          }),
-        },
-        [`&:hover:not(.${inputClasses.disabled})::before`]: {
-          borderBottom: `2px solid ${
-            (theme.vars || theme).palette.text.primary
-          }`,
-        },
-        '&::after': {
-          borderBottom: `2px solid ${
-            (theme.vars || theme).palette.primary.main
-          }`,
-        },
-        [`&.${inputClasses.error}::after`]: {
-          borderBottomColor: (theme.vars || theme).palette.error.main,
-        },
-      }),
-      input: {
-        padding: '4px 0 5px',
-      },
-    },
-  },
   MuiInputLabel: {
     styleOverrides: {
       root: ({ theme }) => ({
@@ -444,27 +348,6 @@ export const textFieldTheme: ThemeComponents = {
         [`&.${formHelperTextClasses.error}`]: {
           color: (theme.vars || theme).palette.error.text,
         },
-      }),
-    },
-  },
-  MuiInputAdornment: {
-    styleOverrides: {
-      root: ({ theme }) => ({
-        color: (theme.vars || theme).palette.text.secondary,
-        variants: [
-          {
-            props: { position: 'start' },
-            style: {
-              marginRight: 8,
-            },
-          },
-          {
-            props: { position: 'end' },
-            style: {
-              marginLeft: 8,
-            },
-          },
-        ],
       }),
     },
   },

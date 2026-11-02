@@ -1,16 +1,7 @@
-The layout primitives in `layout/` originate from the MUI Treasury registry:
-https://github.com/siriwatknp/mui-treasury/tree/1ee6192dc49e73aa194b7d70dfdd7c7bbc84612b/apps/website/registry/layout/layout-core
+# MUI Treasury
 
-Only `Root`, `Content`, and their shared class names are included. The
-`Breakpoint` imports were changed to type-only imports for this project's
-TypeScript configuration, and the files were formatted with Prettier.
+本目录基于上游固定版本的 [布局组件](https://github.com/siriwatknp/mui-treasury/tree/1ee6192dc49e73aa194b7d70dfdd7c7bbc84612b/apps/website/registry/layout/layout-core)和 [Primitive 主题](https://github.com/siriwatknp/mui-treasury/tree/1ee6192dc49e73aa194b7d70dfdd7c7bbc84612b/apps/website/registry/themes/mui-treasury)。
 
-`theme/` is based on the MUI Treasury Primitive documentation theme at the
-same revision:
-https://github.com/siriwatknp/mui-treasury/tree/1ee6192dc49e73aa194b7d70dfdd7c7bbc84612b/apps/website/registry/themes/mui-treasury
-
-The unused MUI X overrides are omitted. Type-only imports and the provider
-export were adjusted for this project's TypeScript and React configuration.
-The light background, sidebar, text and divider colors are adapted for WrtKit.
-The table container border is omitted for the flat workspace layout; other
-component styles and palette colors are retained.
+- 布局仅保留 `Root`、`Content` 及其共享类名。
+- 主题移除了未使用的组件、输入框变体和 MUI X 样式，并适配了项目的 TypeScript 配置。
+- 浅色配色和表格容器已按 WrtKit 的扁平界面调整。

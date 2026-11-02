@@ -61,12 +61,4 @@ export const dialogTheme: ThemeComponents = {
       },
     },
   },
-  MuiDialogContentText: {
-    styleOverrides: {
-      root: ({ theme }) => ({
-        color: theme.vars.palette.text.secondary,
-        marginBottom: 0,
-      }),
-    },
-  },
 };
