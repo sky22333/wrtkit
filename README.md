@@ -22,9 +22,10 @@ WrtKit 是一个本地运行的 OpenWrt 和 ImmortalWrt 固件可视化构建工
 
 构建记录、日志和固件默认保存在运行目录的 `data` 文件夹，可通过 `-data-dir` 指定其他目录。程序默认仅监听本机；远程访问时应使用受信任的 HTTPS 反向代理。
 
+开启公网访问：`wrtkit.exe -addr 0.0.0.0:8088`
+
 软件源可在页面管理，所选源用于构建和固件运行时。HTTP 或 SOCKS5 查询代理用于查询版本、设备、软件索引和 Docker Hub 摘要；容器镜像拉取使用独立的镜像加速设置。
 
-清理产物时也会删除该任务关联的 ImageBuilder 镜像引用，包括此前已存在或其他任务使用的引用。
 
 ## 界面预览
 
@@ -41,5 +42,3 @@ npm run build
 cd ..
 go build -o dist/wrtkit ./cmd/wrtkit
 ```
-
-Windows 可将输出文件名改为 `dist/wrtkit.exe`。
